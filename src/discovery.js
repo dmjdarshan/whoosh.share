@@ -1,0 +1,327 @@
+// Whoosh.share — Discovery Manager
+// Handles audio-based device discovery using ggwave WASM
+
+export class DiscoveryManager {
+  constructor() {
+    this.eventHandlers = new Map();
+    this.audioContext = null;
+    this.ggwave = null;
+    this.isListening = false;
+    this.micStream = null;
+    this.audioWorkletNode = null;
+  }
+
+  // Event emitter pattern
+  on(event, handler) {
+    if (!this.eventHandlers.has(event)) {
+      this.eventHandlers.set(event, []);
+    }
+    this.eventHandlers.get(event).push(handler);
+  }
+
+  emit(event, data) {
+    const handlers = this.eventHandlers.get(event);
+    if (handlers) {
+      handlers.forEach((handler) => handler(data));
+    }
+  }
+
+  // Initialize ggwave and audio context
+  async init() {
+    console.log("[Discovery] Initializing...");
+
+    try {
+      // Check if mediaDevices API is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Microphone access not available. Please use HTTPS or access via http://localhost:8000 (not http://[::]:8000)');
+      }
+
+      // Request microphone permission
+      this.micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          sampleRate: 48000,
+        },
+      });
+
+      console.log("[Discovery] Microphone access granted");
+
+      // Create audio context (must be after user gesture on iOS)
+      this.audioContext = new (
+        window.AudioContext || window.webkitAudioContext
+      )({
+        sampleRate: 48000,
+      });
+
+      // Load ggwave WASM module
+      await this.loadGGWave();
+
+      console.log("[Discovery] Initialization complete");
+    } catch (error) {
+      console.error("[Discovery] Initialization failed:", error);
+      throw error;
+    }
+  }
+
+  // Load ggwave WASM module
+  async loadGGWave() {
+    console.log("[Discovery] Loading ggwave WASM...");
+
+    try {
+      // Load the ggwave script (it now exposes window.ggwave_factory)
+      await this.loadScript("../lib/ggwave/ggwave.js");
+
+      // Wait for the script to fully initialize
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Check if ggwave_factory is available
+      if (typeof window.ggwave_factory !== "function") {
+        throw new Error("ggwave_factory not found - check lib/ggwave/ggwave.js");
+      }
+
+      // Initialize ggwave
+      this.ggwave = await window.ggwave_factory();
+
+      console.log("[Discovery] ggwave WASM loaded successfully");
+      console.log("[Discovery] ggwave methods:", Object.keys(this.ggwave));
+      
+      // Check if encode/decode exist and their signatures
+      if (this.ggwave.encode) {
+        console.log("[Discovery] encode function:", this.ggwave.encode.toString().substring(0, 200));
+      }
+      if (this.ggwave.decode) {
+        console.log("[Discovery] decode function:", this.ggwave.decode.toString().substring(0, 200));
+      }
+      return;
+    } catch (error) {
+      console.error("[Discovery] Failed to load ggwave:", error);
+      throw new Error(
+        "ggwave library failed to load. Please ensure lib/ggwave/ggwave.js is present and valid."
+      );
+    }
+  }
+
+  // Helper to load external script
+  loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  }
+
+  // Start listening for audio transmissions
+  async startListening() {
+    if (this.isListening) {
+      return;
+    }
+
+    console.log("[Discovery] Starting to listen...");
+
+    try {
+      // Create audio source from microphone
+      const source = this.audioContext.createMediaStreamSource(this.micStream);
+
+      // Create script processor for audio analysis
+      // Note: ScriptProcessor is deprecated but still widely supported
+      // For production, consider using AudioWorklet
+      const bufferSize = 4096;
+      const processor = this.audioContext.createScriptProcessor(
+        bufferSize,
+        1,
+        1,
+      );
+
+      processor.onaudioprocess = (event) => {
+        const inputData = event.inputBuffer.getChannelData(0);
+        this.processAudioInput(inputData);
+      };
+
+      // Connect audio graph
+      source.connect(processor);
+      processor.connect(this.audioContext.destination);
+
+      this.audioWorkletNode = processor;
+      this.isListening = true;
+
+      console.log("[Discovery] Listening started");
+    } catch (error) {
+      console.error("[Discovery] Failed to start listening:", error);
+      throw error;
+    }
+  }
+
+  // Process incoming audio data
+  processAudioInput(samples) {
+    if (!this.ggwave) {
+      return;
+    }
+
+    try {
+      // Decode audio samples using ggwave
+      // Second parameter is the protocol ID (same as encode)
+      const PROTOCOL_ULTRASOUND_FASTEST = 1;
+      const decoded = this.ggwave.decode(samples, PROTOCOL_ULTRASOUND_FASTEST);
+
+      if (decoded && decoded.length > 0) {
+        console.log("[Discovery] Decoded data:", decoded.length, "chars");
+
+        // ggwave returns a string directly, not bytes
+        const data = JSON.parse(decoded);
+
+        // Handle different message types
+        if (data.type === "device") {
+          this.emit("deviceFound", data.device);
+        } else if (data.type === "offer") {
+          this.emit("offerReceived", data.offer);
+        } else if (data.type === "answer") {
+          this.emit("answerReceived", data.answer);
+        }
+      }
+    } catch (error) {
+      // Ignore decoding errors (ambient noise, etc.)
+      // Only log if it's not a parsing error
+      if (!(error instanceof SyntaxError)) {
+        console.warn("[Discovery] Decode error:", error);
+      }
+    }
+  }
+
+  // Stop listening
+  stopListening() {
+    console.log("[Discovery] Stopping listening...");
+
+    if (this.audioWorkletNode) {
+      this.audioWorkletNode.disconnect();
+      this.audioWorkletNode = null;
+    }
+
+    if (this.micStream) {
+      this.micStream.getTracks().forEach((track) => track.stop());
+      this.micStream = null;
+    }
+
+    this.isListening = false;
+  }
+
+  // Broadcast device presence
+  async broadcast(deviceInfo) {
+    console.log("[Discovery] Broadcasting device:", deviceInfo);
+
+    const message = {
+      type: "device",
+      device: deviceInfo,
+    };
+
+    await this.transmit(message);
+  }
+
+  // Send WebRTC offer via audio
+  async sendOffer(offer, targetDeviceId) {
+    console.log("[Discovery] Sending offer to:", targetDeviceId);
+
+    const message = {
+      type: "offer",
+      offer: offer,
+      targetId: targetDeviceId,
+    };
+
+    await this.transmit(message);
+  }
+
+  // Send WebRTC answer via audio
+  async sendAnswer(answer) {
+    console.log("[Discovery] Sending answer");
+
+    const message = {
+      type: "answer",
+      answer: answer,
+    };
+
+    await this.transmit(message);
+  }
+
+  // Transmit data via audio
+  async transmit(data) {
+    if (!this.ggwave || !this.audioContext) {
+      throw new Error("ggwave not initialized");
+    }
+
+    try {
+      // Serialize data to JSON string (ggwave expects a string, not bytes)
+      const json = JSON.stringify(data);
+
+      console.log("[Discovery] Transmitting:", json.length, "bytes");
+
+      // Encode to audio using ggwave
+      // Protocol: ULTRASOUND_FASTEST (18-22kHz, inaudible)
+      const PROTOCOL_ULTRASOUND_FASTEST = 1;
+      const volume = 10; // Volume level (0-100)
+      const audioSamples = this.ggwave.encode(
+        json, // Pass string directly, not Uint8Array
+        PROTOCOL_ULTRASOUND_FASTEST,
+        volume,
+        false // useAGC (automatic gain control)
+      );
+
+      // Play audio through speakers
+      await this.playAudio(audioSamples);
+
+      console.log("[Discovery] Transmission complete");
+    } catch (error) {
+      console.error("[Discovery] Transmission failed:", error);
+      throw error;
+    }
+  }
+
+  // Play audio samples through speakers
+  async playAudio(samples) {
+    return new Promise((resolve, reject) => {
+      try {
+        // Create audio buffer
+        const buffer = this.audioContext.createBuffer(
+          1, // mono
+          samples.length,
+          this.audioContext.sampleRate,
+        );
+
+        // Copy samples to buffer
+        buffer.getChannelData(0).set(samples);
+
+        // Create buffer source
+        const source = this.audioContext.createBufferSource();
+        source.buffer = buffer;
+        source.connect(this.audioContext.destination);
+
+        // Play
+        source.onended = () => resolve();
+        source.start(0);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  // Clean up resources
+  cleanup() {
+    console.log("[Discovery] Cleaning up...");
+
+    this.stopListening();
+
+    if (this.audioContext) {
+      this.audioContext.close();
+      this.audioContext = null;
+    }
+
+    if (this.ggwave && this.ggwave.free) {
+      this.ggwave.free();
+      this.ggwave = null;
+    }
+  }
+}
+
+

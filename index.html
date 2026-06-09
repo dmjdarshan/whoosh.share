@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#007AFF">
+    <meta name="description" content="Serverless peer-to-peer file transfer using sound-based discovery">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>Whoosh — Share files instantly</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="app-header">
+            <h1 class="app-title">whoosh</h1>
+        </header>
+
+        <!-- Main Content -->
+        <main class="app-main">
+            <!-- Radar Container -->
+            <div class="radar-container">
+                <div class="radar" id="radar">
+                    <!-- Static background rings -->
+                    <div class="radar-ring radar-ring-1"></div>
+                    <div class="radar-ring radar-ring-2"></div>
+                    <div class="radar-ring radar-ring-3"></div>
+                    
+                    <!-- Pulse rings (hidden by default, shown when listening) -->
+                    <div class="radar-pulse-container" id="radarPulse" style="display: none;">
+                        <div class="radar-pulse"></div>
+                        <div class="radar-pulse"></div>
+                        <div class="radar-pulse"></div>
+                    </div>
+                    
+                    <!-- Center icon -->
+                    <div class="radar-center" id="radarCenter">
+                        <svg class="radar-icon" id="radarIcon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <!-- Mic icon (default) -->
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                            <line x1="12" y1="19" x2="12" y2="23"></line>
+                            <line x1="8" y1="23" x2="16" y2="23"></line>
+                        </svg>
+                    </div>
+                    
+                    <!-- Device bubbles will be inserted here dynamically -->
+                    <div class="device-bubbles" id="deviceBubbles"></div>
+                </div>
+            </div>
+
+            <!-- Status Text -->
+            <div class="status-container">
+                <p class="status-text" id="statusText">Tap to find nearby devices</p>
+                <p class="status-hint" id="statusHint" style="display: none;">
+                    <span class="hint-item">🔊 Keep volume up</span>
+                    <span class="hint-item">📱 Keep screen on</span>
+                </p>
+            </div>
+
+            <!-- Action Button -->
+            <div class="action-container">
+                <button class="btn btn-primary" id="actionBtn">Start Discovery</button>
+            </div>
+
+            <!-- Device Info -->
+            <div class="device-info">
+                <p class="device-info-text" id="deviceInfo">Your device: Loading...</p>
+            </div>
+        </main>
+
+        <!-- Bottom Sheet (hidden by default) -->
+        <div class="bottom-sheet-backdrop" id="bottomSheetBackdrop" style="display: none;"></div>
+        <div class="bottom-sheet" id="bottomSheet" style="display: none;">
+            <div class="bottom-sheet-handle"></div>
+            <div class="bottom-sheet-content" id="bottomSheetContent">
+                <!-- Content will be dynamically inserted based on state -->
+            </div>
+        </div>
+
+        <!-- Error Toast -->
+        <div class="error-toast" id="errorToast" style="display: none;">
+            <p class="error-toast-text" id="errorToastText"></p>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script type="module" src="src/main.js?v=4"></script>
+</body>
+</html>
