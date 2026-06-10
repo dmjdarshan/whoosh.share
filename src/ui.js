@@ -345,6 +345,43 @@ export class UIManager {
     this.showBottomSheet(content);
   }
 
+  showSending(file, device) {
+    const content = `
+      <div style="text-align: center;">
+        <p style="font-size: 15px; color: var(--text-secondary); margin-bottom: 16px;">
+          Sending to
+        </p>
+        <p style="font-size: 17px; font-weight: 600; margin-bottom: 24px;">
+          ${device ? `${this.getDeviceIcon(device.type)} ${device.name}` : 'Nearby device'}
+        </p>
+        
+        <div style="background: var(--surface-2); border-radius: var(--radius-md); padding: 24px; margin-bottom: 16px;">
+          <p style="font-size: 15px; font-weight: 500; margin-bottom: 8px;">${file.name}</p>
+          <p style="font-size: 13px; color: var(--text-secondary);">${this.formatFileSize(file.size)}</p>
+        </div>
+        
+        <div style="width: 100%; height: 6px; background: var(--surface-2); border-radius: 99px; overflow: hidden; margin-bottom: 8px;">
+          <div id="progressBar" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.3s;"></div>
+        </div>
+        
+        <p id="progressText" style="font-size: 13px; color: var(--text-secondary); font-family: monospace;">
+          0 B / ${this.formatFileSize(file.size)} · 0%
+        </p>
+
+        <button class="btn btn-secondary" id="cancelTransferBtn" style="margin-top: 16px;">Cancel</button>
+      </div>
+    `;
+
+    this.showBottomSheet(content);
+
+    const cancelTransferBtn = document.getElementById('cancelTransferBtn');
+    if (cancelTransferBtn) {
+      cancelTransferBtn.addEventListener('click', () => {
+        this.emit('cancelTransfer');
+      });
+    }
+  }
+
   updateTransferProgress(progress) {
     const progressBar = document.getElementById('progressBar');
     const progressText = document.getElementById('progressText');
@@ -473,5 +510,4 @@ export class UIManager {
     URL.revokeObjectURL(url);
   }
 }
-
 

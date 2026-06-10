@@ -14,6 +14,13 @@ class WhooshApp {
     this.transfer = null;
     this.wakeLock = null;
     this.state = 'idle'; // idle, listening, connected, transferring
+    this.localDevice = null;
+    this.currentPeer = null;
+    this.discoveredDeviceIds = new Set();
+    this.presenceLoopActive = false;
+    this.discoveryTimeout = null;
+    this.DISCOVERY_TIMEOUT_MS = 40000;
+    this.PRESENCE_RETRY_DELAY_MS = 2000;
   }
 
   async init() {
@@ -23,9 +30,8 @@ class WhooshApp {
     this.ui = new UIManager();
     this.ui.init();
 
-    // Set device name
-    const deviceName = this.getDeviceName();
-    this.ui.setDeviceInfo(deviceName);
+    this.localDevice = this.getLocalDevice();
+    this.ui.setDeviceInfo(this.localDevice.name);
 
     // Initialize managers (but don't start yet)
     this.discovery = new DiscoveryManager();
@@ -52,17 +58,23 @@ class WhooshApp {
     // Discovery events
     this.discovery.on('deviceFound', (device) => {
       console.log('[Whoosh] Device found:', device);
+      if (device.id === this.localDevice.id) {
+        return;
+      }
+      this.discoveredDeviceIds.add(device.id);
+      this.stopPresenceBroadcast();
+      this.clearDiscoveryTimeout();
       this.ui.addDevice(device);
     });
 
-    this.discovery.on('offerReceived', (offer) => {
+    this.discovery.on('offerReceived', (message) => {
       console.log('[Whoosh] Offer received');
-      this.handleOfferReceived(offer);
+      this.handleOfferReceived(message);
     });
 
-    this.discovery.on('answerReceived', (answer) => {
+    this.discovery.on('answerReceived', (message) => {
       console.log('[Whoosh] Answer received');
-      this.handleAnswerReceived(answer);
+      this.handleAnswerReceived(message);
     });
 
     this.discovery.on('error', (error) => {
@@ -75,6 +87,8 @@ class WhooshApp {
     this.connection.on('connected', () => {
       console.log('[Whoosh] WebRTC connected');
       this.state = 'connected';
+      this.stopPresenceBroadcast();
+      this.clearDiscoveryTimeout();
       this.ui.setState('connected');
       this.releaseWakeLock();
     });
@@ -88,6 +102,10 @@ class WhooshApp {
       console.error('[Whoosh] Connection error:', error);
       this.ui.showError(this.getHumanReadableError(error));
       this.handleDisconnection();
+    });
+
+    this.connection.on('message', (message) => {
+      this.transfer.handleIncomingMessage(message);
     });
 
     // Transfer events
@@ -129,14 +147,18 @@ class WhooshApp {
 
       // Update UI
       this.state = 'listening';
+      this.discoveredDeviceIds.clear();
       this.ui.setState('listening');
 
-      // Start broadcasting our presence
-      await this.broadcastPresence();
+      this.startDiscoveryTimeout();
+      this.startPresenceBroadcastLoop();
 
     } catch (error) {
       console.error('[Whoosh] Failed to start discovery:', error);
       this.ui.showError(this.getHumanReadableError(error));
+      this.stopPresenceBroadcast();
+      this.clearDiscoveryTimeout();
+      this.discovery.cleanup();
       this.releaseWakeLock();
     }
   }
@@ -144,7 +166,9 @@ class WhooshApp {
   async stopDiscovery() {
     console.log('[Whoosh] Stopping discovery...');
 
-    this.discovery.stopListening();
+    this.stopPresenceBroadcast();
+    this.clearDiscoveryTimeout();
+    this.discovery.cleanup();
     this.releaseWakeLock();
 
     this.state = 'idle';
@@ -153,22 +177,63 @@ class WhooshApp {
   }
 
   async broadcastPresence() {
-    // Broadcast our device info periodically
-    const deviceInfo = {
-      id: this.generateDeviceId(),
-      name: this.getDeviceName(),
-      type: this.getDeviceType()
-    };
-
     try {
-      await this.discovery.broadcast(deviceInfo);
+      await this.discovery.broadcast(this.localDevice);
     } catch (error) {
       console.error('[Whoosh] Failed to broadcast presence:', error);
     }
   }
 
+  startPresenceBroadcastLoop() {
+    if (this.presenceLoopActive) {
+      return;
+    }
+
+    this.presenceLoopActive = true;
+    this.runPresenceBroadcastLoop();
+  }
+
+  stopPresenceBroadcast() {
+    this.presenceLoopActive = false;
+  }
+
+  async runPresenceBroadcastLoop() {
+    while (this.presenceLoopActive && this.state === 'listening') {
+      await this.broadcastPresence();
+
+      if (!this.presenceLoopActive || this.state !== 'listening') {
+        break;
+      }
+
+      await this.sleep(this.PRESENCE_RETRY_DELAY_MS);
+    }
+  }
+
+  startDiscoveryTimeout() {
+    this.clearDiscoveryTimeout();
+
+    this.discoveryTimeout = setTimeout(() => {
+      if (this.state !== 'listening' || this.discoveredDeviceIds.size > 0) {
+        return;
+      }
+
+      this.stopDiscovery();
+      this.ui.showError('No nearby devices found. Try again when both devices are ready.');
+    }, this.DISCOVERY_TIMEOUT_MS);
+  }
+
+  clearDiscoveryTimeout() {
+    if (this.discoveryTimeout) {
+      clearTimeout(this.discoveryTimeout);
+      this.discoveryTimeout = null;
+    }
+  }
+
   async handleDeviceSelected(device) {
     console.log('[Whoosh] Device selected:', device);
+    this.currentPeer = device;
+    this.stopPresenceBroadcast();
+    this.clearDiscoveryTimeout();
 
     // Show file picker
     this.ui.showFilePicker(device);
@@ -178,7 +243,7 @@ class WhooshApp {
       const offer = await this.connection.createOffer();
       
       // Send offer via audio
-      await this.discovery.sendOffer(offer, device.id);
+      await this.discovery.sendOffer(offer, device.id, this.localDevice);
       
       this.ui.setStatus('Connecting...');
     } catch (error) {
@@ -187,13 +252,25 @@ class WhooshApp {
     }
   }
 
-  async handleOfferReceived(offer) {
+  async handleOfferReceived(message) {
+    if (message.targetId && message.targetId !== this.localDevice.id) {
+      return;
+    }
+
     try {
+      this.currentPeer = message.from || null;
+      this.stopPresenceBroadcast();
+      this.clearDiscoveryTimeout();
+
       // Create answer
-      const answer = await this.connection.handleOffer(offer);
+      const answer = await this.connection.handleOffer(message.offer);
       
       // Send answer via audio
-      await this.discovery.sendAnswer(answer);
+      await this.discovery.sendAnswer(
+        answer,
+        message.from ? message.from.id : null,
+        this.localDevice
+      );
       
       this.ui.setStatus('Connecting...');
     } catch (error) {
@@ -202,9 +279,16 @@ class WhooshApp {
     }
   }
 
-  async handleAnswerReceived(answer) {
+  async handleAnswerReceived(message) {
+    if (message.targetId && message.targetId !== this.localDevice.id) {
+      return;
+    }
+
     try {
-      await this.connection.handleAnswer(answer);
+      this.currentPeer = message.from || this.currentPeer;
+      this.stopPresenceBroadcast();
+      this.clearDiscoveryTimeout();
+      await this.connection.handleAnswer(message.answer);
     } catch (error) {
       console.error('[Whoosh] Failed to handle answer:', error);
       this.ui.showError(this.getHumanReadableError(error));
@@ -221,7 +305,8 @@ class WhooshApp {
 
     try {
       this.state = 'transferring';
-      await this.transfer.sendFile(file, this.connection.getDataChannel());
+      this.ui.showSending(file, this.currentPeer);
+      await this.transfer.sendFile(file, this.connection.getDataChannel(), this.localDevice);
     } catch (error) {
       console.error('[Whoosh] Failed to send file:', error);
       this.ui.showError(this.getHumanReadableError(error));
@@ -238,6 +323,9 @@ class WhooshApp {
 
   handleDisconnection() {
     this.state = 'idle';
+    this.currentPeer = null;
+    this.stopPresenceBroadcast();
+    this.clearDiscoveryTimeout();
     this.ui.setState('idle');
     this.ui.clearDevices();
     this.releaseWakeLock();
@@ -279,6 +367,38 @@ class WhooshApp {
   }
 
   // Utility functions
+  getLocalDevice() {
+    return {
+      id: this.getStoredDeviceId(),
+      name: this.getStoredDeviceName(),
+      type: this.getDeviceType()
+    };
+  }
+
+  getStoredDeviceId() {
+    const key = 'whoosh-device-id';
+    let id = localStorage.getItem(key);
+
+    if (!id) {
+      id = this.generateDeviceId();
+      localStorage.setItem(key, id);
+    }
+
+    return id;
+  }
+
+  getStoredDeviceName() {
+    const key = 'whoosh-device-name';
+    let name = localStorage.getItem(key);
+
+    if (!name) {
+      name = this.getDeviceName();
+      localStorage.setItem(key, name);
+    }
+
+    return name;
+  }
+
   getDeviceName() {
     const platform = navigator.platform || 'Unknown';
     const userAgent = navigator.userAgent;
@@ -326,6 +446,10 @@ class WhooshApp {
     return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   getHumanReadableError(error) {
     const errorMessage = error.message || error.toString();
 
@@ -357,5 +481,3 @@ if (document.readyState === 'loading') {
   const app = new WhooshApp();
   app.init();
 }
-
-

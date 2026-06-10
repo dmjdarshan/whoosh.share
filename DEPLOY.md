@@ -21,10 +21,8 @@ Your app will be live at: `https://YOUR_USERNAME.github.io/whoosh-share/`
 
 ## Important Notes
 
-### ggwave Library Issue
-The ggwave library currently has an API mismatch. The error "Cannot pass non-string to std::string" indicates the library expects different parameter types than documented.
-
-**Temporary workaround:** The app UI and WebRTC logic are complete and working. The audio discovery feature needs the correct ggwave API parameters to be determined through testing.
+### ggwave Library
+The bundled `lib/ggwave/ggwave.js` build exposes `window.ggwave_factory` and is initialized through `getDefaultParameters()` plus `init(params)`. If you replace this file with another upstream build, smoke-test discovery before deploying because ggwave browser builds can expose different binding shapes.
 
 ### Service Worker
 Service worker caching is currently disabled (`CACHING_DISABLED = true` in `sw.js`) to avoid cache issues during development. Re-enable it for production by setting it to `false`.
@@ -38,7 +36,7 @@ Service worker caching is currently disabled (`CACHING_DISABLED = true` in `sw.j
 1. Open the GitHub Pages URL on two devices
 2. Both devices should be on the same WiFi network
 3. Click "Start Discovery" on both
-4. The audio discovery will work once the ggwave API is corrected
+4. Confirm audio discovery starts without ggwave binding errors
 
 ## File Structure
 
@@ -51,7 +49,7 @@ whoosh-share/
 ├── src/
 │   ├── main.js            # App initialization
 │   ├── ui.js              # UI management
-│   ├── discovery.js       # Audio discovery (needs ggwave fix)
+│   ├── discovery.js       # Audio discovery
 │   ├── connection.js      # WebRTC connection
 │   └── transfer.js        # File transfer
 └── lib/ggwave/
@@ -60,7 +58,7 @@ whoosh-share/
 
 ## Known Issues
 
-1. **ggwave API**: Parameters need adjustment for encode/decode functions
+1. **Device audio support**: Some speakers/microphones do not reliably handle ultrasonic frequencies
 2. **Browser caching**: Very aggressive - may need hard refresh after updates
 3. **Icons**: Placeholder files need to be replaced with actual PNGs
 
@@ -68,6 +66,6 @@ whoosh-share/
 
 1. Deploy to GitHub Pages
 2. Test on fresh browser (no cache)
-3. Debug ggwave API with browser dev tools
+3. Test discovery on target devices with browser dev tools open
 4. Add proper icon files
 5. Re-enable service worker caching

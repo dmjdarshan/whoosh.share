@@ -43,20 +43,21 @@ Device A (Sender)                        Device B (Receiver)
 ─────────────────                        ────────────────────
 
 1. User taps "Start"
-2. Create WebRTC offer (SDP ~500 bytes)
-3. Encode offer via ggwave → audio tones
-4. Play tones through speaker
-                          ────────────►  5. Mic captures tones
-                                         6. ggwave decodes → SDP offer
-                                         7. Create WebRTC answer
-                                         8. Encode answer → audio tones
-                                         9. Play tones through speaker
-10. Mic captures tones   ◄────────────
-11. ggwave decodes → SDP answer
-12. Apply answer → WebRTC connected
-                          ◄────────────► 13. DataChannel open
-14. Chunk file → send over DataChannel
-                          ────────────►  15. Receive chunks → reassemble → download
+2. Broadcast device presence for up to ~40 seconds while listening
+3. Create WebRTC offer (SDP ~500 bytes) after a peer is selected
+4. Encode offer via ggwave → audio tones
+5. Play tones through speaker
+                          ────────────►  6. Mic captures tones
+                                         7. ggwave decodes → SDP offer
+                                         8. Create WebRTC answer
+                                         9. Encode answer → audio tones
+                                         10. Play tones through speaker
+11. Mic captures tones   ◄────────────
+12. ggwave decodes → SDP answer
+13. Apply answer → WebRTC connected
+                          ◄────────────► 14. DataChannel open
+15. Chunk file → send over DataChannel
+                          ────────────►  16. Receive chunks → reassemble → download
 ```
 
 ---

@@ -49,18 +49,18 @@ See [Architecture.md](Architecture.md) for detailed technical documentation.
    cd whoosh.share
    ```
 
-2. **Download ggwave WASM files:**
+2. **Verify ggwave WASM files:**
    
-   The app requires ggwave WASM binaries. Download them from the official repository:
+   The app requires a ggwave browser build. This repository includes a self-contained `lib/ggwave/ggwave.js`; if you replace it, download a compatible build from the official repository:
    
    ```bash
    # Create lib directory
    mkdir -p lib/ggwave
    
-   # Download ggwave.js and ggwave.wasm from:
+   # Download ggwave.js from:
    # https://github.com/ggerganov/ggwave/tree/master/examples/ggwave-wasm
    
-   # Place them in lib/ggwave/
+   # Place it in lib/ggwave/
    ```
    
    Or build from source:
@@ -68,7 +68,7 @@ See [Architecture.md](Architecture.md) for detailed technical documentation.
    git clone https://github.com/ggerganov/ggwave.git
    cd ggwave
    # Follow build instructions for WASM
-   # Copy ggwave.js and ggwave.wasm to whoosh.share/lib/ggwave/
+   # Copy ggwave.js to whoosh.share/lib/ggwave/
    ```
 
 3. **Serve the app:**
@@ -94,7 +94,7 @@ See [Architecture.md](Architecture.md) for detailed technical documentation.
 5. **Test with two devices:**
    - Open the same URL on two devices on the same WiFi
    - Tap "Start Discovery" on both
-   - Wait for devices to appear on the radar
+   - Wait for devices to appear on the radar; discovery retries for about 40 seconds
    - Tap a device to send a file
 
 ---
@@ -115,8 +115,7 @@ whoosh.share/
 │   └── transfer.js         # File chunking & transfer
 ├── lib/
 │   └── ggwave/
-│       ├── ggwave.js       # ⚠️ REQUIRED: Download from ggwave repo
-│       └── ggwave.wasm     # ⚠️ REQUIRED: Download from ggwave repo
+│       └── ggwave.js       # ggwave WASM wrapper, current copy embeds WASM
 ├── Architecture.md         # Detailed technical documentation
 └── README.md               # This file
 ```
@@ -125,49 +124,41 @@ whoosh.share/
 
 ## ⚙️ Integrating ggwave WASM
 
-The current implementation includes a **mock ggwave** for development. To enable actual audio discovery:
+The current implementation loads the bundled `lib/ggwave/ggwave.js` build directly. This build exposes `window.ggwave_factory`, embeds the WASM payload, and uses the current ggwave API:
+
+- `const ggwave = await window.ggwave_factory()`
+- `const params = ggwave.getDefaultParameters()`
+- `const instance = ggwave.init(params)`
+- `ggwave.encode(instance, payload, protocol, volume)`
+- `ggwave.decode(instance, samples)`
+
+If you replace `ggwave.js` with a different upstream build, verify whether that build expects an external `ggwave.wasm` file and update `src/discovery.js` only if its API differs.
 
 ### Step 1: Download ggwave Files
 
-Get the latest ggwave WASM build:
+Get a compatible ggwave WASM build:
 
 - **Official repo:** https://github.com/ggerganov/ggwave
 - **WASM example:** https://github.com/ggerganov/ggwave/tree/master/examples/ggwave-wasm
 - **Pre-built demo:** https://wasm.ggerganov.com/ (inspect network tab for files)
 
-You need:
-- `ggwave.js` — JavaScript wrapper
-- `ggwave.wasm` — WebAssembly binary
+You need either:
+- A self-contained `ggwave.js` like the current bundled file
+- Or `ggwave.js` plus `ggwave.wasm`, if your chosen build loads WASM separately
 
 ### Step 2: Place Files
 
 ```bash
 lib/ggwave/
-├── ggwave.js
-└── ggwave.wasm
+└── ggwave.js
 ```
 
-### Step 3: Update discovery.js
-
-Replace the mock implementation in `src/discovery.js`:
-
-```javascript
-// Replace this:
-this.ggwave = this.createMockGGWave();
-
-// With this:
-const GGWave = await import('../lib/ggwave/ggwave.js');
-this.ggwave = await GGWave.init({
-  wasmPath: '/lib/ggwave/ggwave.wasm'
-});
-```
-
-### Step 4: Test
+### Step 3: Test
 
 1. Open the app on two devices
 2. Tap "Start Discovery" on both
-3. You should hear a faint ultrasonic tone (or nothing if using ultrasonic mode)
-4. Devices should appear on the radar within 5-10 seconds
+3. You should hear repeated faint ultrasonic tones (or nothing if using ultrasonic mode)
+4. Devices should appear on the radar within 5-10 seconds; if nothing is found after about 40 seconds, discovery stops so you can retry cleanly
 
 ---
 
@@ -258,7 +249,7 @@ The codebase is modular:
 
 ### Current Implementation
 
-- **Mock ggwave** — Audio discovery won't work until real ggwave WASM is integrated
+- **ggwave API dependent** — Replacing the bundled ggwave build may require adapting `src/discovery.js`
 - **Single file only** — No multi-file queue (MVP limitation)
 - **No resume** — Transfer must complete in one session
 - **No encryption** — Files are sent in plaintext over local network (WebRTC is encrypted by default with DTLS)
@@ -297,7 +288,7 @@ The codebase is modular:
 
 Contributions welcome! Areas that need work:
 
-1. **ggwave integration** — Replace mock with real WASM module
+1. **ggwave integration** — Test and harden audio discovery across device/browser pairs
 2. **iOS testing** — Validate audio discovery on real iOS devices
 3. **Error handling** — More robust error recovery
 4. **Multi-file support** — Queue multiple files
