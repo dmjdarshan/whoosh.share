@@ -20,6 +20,7 @@ export class UIManager {
       statusText: document.getElementById('statusText'),
       statusHint: document.getElementById('statusHint'),
       actionBtn: document.getElementById('actionBtn'),
+      listenBtn: document.getElementById('listenBtn'),
       deviceInfo: document.getElementById('deviceInfo'),
       bottomSheet: document.getElementById('bottomSheet'),
       bottomSheetBackdrop: document.getElementById('bottomSheetBackdrop'),
@@ -36,9 +37,15 @@ export class UIManager {
     // Action button
     this.elements.actionBtn.addEventListener('click', () => {
       if (this.currentState === 'idle') {
-        this.emit('startDiscovery');
+        this.emit('startBroadcast');
       } else if (this.currentState === 'listening') {
         this.emit('cancelDiscovery');
+      }
+    });
+
+    this.elements.listenBtn.addEventListener('click', () => {
+      if (this.currentState === 'idle') {
+        this.emit('startListening');
       }
     });
 
@@ -85,11 +92,13 @@ export class UIManager {
 
   showIdleState() {
     // Update button
-    this.elements.actionBtn.textContent = 'Start Discovery';
+    this.elements.actionBtn.textContent = 'Start Sending';
     this.elements.actionBtn.disabled = false;
+    this.elements.listenBtn.style.display = 'block';
+    this.elements.listenBtn.disabled = false;
 
     // Update status
-    this.elements.statusText.textContent = 'Tap to find nearby devices';
+    this.elements.statusText.textContent = 'Start sending on one device, get ready on the other';
     this.elements.statusHint.style.display = 'none';
 
     // Hide pulse animation
@@ -104,6 +113,7 @@ export class UIManager {
     // Update button
     this.elements.actionBtn.textContent = 'Cancel';
     this.elements.actionBtn.disabled = false;
+    this.elements.listenBtn.style.display = 'none';
 
     // Update status
     this.elements.statusText.textContent = 'Listening for devices…';
@@ -120,6 +130,7 @@ export class UIManager {
   showConnectedState() {
     this.elements.statusText.textContent = 'Connected';
     this.elements.radarCenter.classList.add('active');
+    this.elements.listenBtn.style.display = 'none';
   }
 
   showTransferringState() {
@@ -510,4 +521,3 @@ export class UIManager {
     URL.revokeObjectURL(url);
   }
 }
-

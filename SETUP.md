@@ -136,8 +136,8 @@ http://localhost:8000
 
 1. Open two browser windows/tabs
 2. Go to `http://localhost:8000` in both
-3. Tap "Start Discovery" in both windows
-4. Devices should appear on radar
+3. Tap "Start Sending" in one window and "Ready to Receive" in the other
+4. The broadcaster should appear on the listener's radar
 
 **Note:** This tests the UI but not real audio discovery (same device can't hear itself).
 
@@ -154,16 +154,16 @@ http://localhost:8000
 
 2. On Device 1 (computer):
    - Open `http://localhost:8000`
-   - Tap "Start Discovery"
+   - Tap "Start Sending"
 
 3. On Device 2 (phone/tablet):
    - Connect to same WiFi
    - Open `http://YOUR_IP:8000` (e.g., `http://192.168.1.100:8000`)
-   - Tap "Start Discovery"
+   - Tap "Ready to Receive"
 
-4. Wait 5-10 seconds for devices to discover each other
+4. Wait 5-10 seconds for the broadcaster to appear
 
-5. Tap a device bubble to send a file
+5. Tap the device bubble on the listener to answer the broadcast
 
 ---
 
@@ -199,28 +199,28 @@ http://localhost:8000
    - Move devices closer together
 
 3. **Hardware limitations**
-   - Some devices can't produce/capture 18-22kHz frequencies
-   - Try audible mode (see below)
+   - Some devices struggle with particular frequency ranges
+   - The app currently uses audible tones for reliability
 
 4. **Incompatible ggwave build**
    - Check browser console for binding errors from `init`, `encode`, or `decode`
    - Verify the build exposes `window.ggwave_factory`
 
-### Testing with Audible Mode
+### Testing with Ultrasonic Mode
 
-If ultrasonic isn't working, test with audible tones:
+Audible tones are the default because the wave-share reference notes that ultrasonic transmission is unreliable on many devices. After the basic flow works, you can try ultrasonic tones:
 
 In `src/discovery.js`, change the assigned protocol:
 
 ```javascript
 // Find this line in loadGGWave():
-this.protocol = this.ggwave.ProtocolId.GGWAVE_PROTOCOL_ULTRASOUND_FASTEST;
-
-// Change to audible mode:
 this.protocol = this.ggwave.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FASTEST;
+
+// Change to ultrasonic mode:
+this.protocol = this.ggwave.ProtocolId.GGWAVE_PROTOCOL_ULTRASOUND_FASTEST;
 ```
 
-You should hear beeping sounds during discovery.
+You may hear nothing in ultrasonic mode; if discovery stops working, switch back to audible mode.
 
 ### WebRTC connection fails
 
@@ -261,7 +261,7 @@ ngrok http 8000
 
 - Full Web Audio API support
 - Reliable microphone access
-- Good ultrasonic frequency support
+- Good audible frequency support
 
 ### Firefox
 
@@ -275,7 +275,7 @@ ngrok http 8000
 ⚠️ **Requires user gesture**
 
 - AudioContext must be created after user tap
-- "Start Discovery" button serves as the required gesture
+- The "Start Sending" or "Ready to Receive" button serves as the required gesture
 - iOS 16+ required for best compatibility
 - **Needs real device testing** — simulator won't work
 

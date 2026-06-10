@@ -35,8 +35,8 @@ Service worker caching is currently disabled (`CACHING_DISABLED = true` in `sw.j
 
 1. Open the GitHub Pages URL on two devices
 2. Both devices should be on the same WiFi network
-3. Click "Start Discovery" on both
-4. Confirm audio discovery starts without ggwave binding errors
+3. Click "Start Sending" on the sender and "Ready to Receive" on the receiver
+4. Confirm the receiver decodes the broadcast without ggwave binding errors
 
 ## File Structure
 

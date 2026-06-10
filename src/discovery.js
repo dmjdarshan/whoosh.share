@@ -99,7 +99,10 @@ export class DiscoveryManager {
       params.operatingMode = this.ggwave.GGWAVE_OPERATING_MODE_RX_AND_TX;
 
       this.ggwaveInstance = this.ggwave.init(params);
-      this.protocol = this.ggwave.ProtocolId.GGWAVE_PROTOCOL_ULTRASOUND_FASTEST;
+      // wave-share notes that ultrasonic transmission is unreliable on many devices.
+      // Use audible fastest for the MVP path; once the flow is stable we can add
+      // an ultrasonic preference with audible fallback.
+      this.protocol = this.ggwave.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FASTEST;
 
       console.log("[Discovery] ggwave WASM loaded and initialized successfully");
       console.log("[Discovery] Sample rate:", sampleRate);
@@ -279,7 +282,7 @@ export class DiscoveryManager {
 
       console.log("[Discovery] Transmitting:", json.length, "bytes");
 
-      const volume = 10; // Volume level (0-100)
+      const volume = 50; // Volume level (0-100)
       const audioSamples = this.ggwave.encode(
         this.ggwaveInstance,
         json, // Pass string directly, not Uint8Array
