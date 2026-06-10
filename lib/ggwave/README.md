@@ -24,7 +24,7 @@ const instance = ggwave.init(params);
 const samples = ggwave.encode(
   instance,
   payload,
-  ggwave.ProtocolId.GGWAVE_PROTOCOL_ULTRASOUND_FASTEST,
+  ggwave.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FASTEST,
   10
 );
 
@@ -39,7 +39,7 @@ If you download a different build from upstream, it may require a separate `ggwa
 
 - `window.ggwave_factory` exists
 - `getDefaultParameters()`, `init(params)`, `encode(instance, ...)`, and `decode(instance, ...)` work
-- `ProtocolId.GGWAVE_PROTOCOL_ULTRASOUND_FASTEST` exists
+- `ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FASTEST` exists
 - Discovery starts in the browser without binding errors
 
 Useful upstream links:
@@ -54,5 +54,5 @@ If discovery does not work:
 
 - Check microphone permission and browser console errors
 - Turn volume up and keep devices close together
-- Try audible mode by changing `this.protocol` in `src/discovery.js` to `GGWAVE_PROTOCOL_AUDIBLE_FASTEST`
+- Try ultrasonic mode only after audible mode works; some devices cannot reliably capture it
 - Test on Chrome first, then Safari/iOS after the basic flow is confirmed

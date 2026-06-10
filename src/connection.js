@@ -8,12 +8,9 @@ export class ConnectionManager {
     this.eventHandlers = new Map();
     this.iceGatheringComplete = false;
     
-    // STUN servers for NAT traversal
+    // Same-LAN transfer: gather host candidates only, matching wave-share's serverless model.
     this.config = {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
+      iceServers: []
     };
   }
 
@@ -250,5 +247,4 @@ export class ConnectionManager {
     return result;
   }
 }
-
 

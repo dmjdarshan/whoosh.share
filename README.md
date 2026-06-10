@@ -8,7 +8,7 @@
 
 ## 🎯 What is Whoosh?
 
-Whoosh is a web app that lets you transfer files between devices on the same WiFi network without any server in between. It uses **sound** (ultrasonic audio tones) to discover nearby devices and establish a direct peer-to-peer connection via WebRTC.
+Whoosh is a web app that lets you transfer files between devices on the same WiFi network without any server in between. It uses **sound** to discover nearby devices and establish a direct peer-to-peer connection via WebRTC.
 
 ### Key Features
 
@@ -25,7 +25,7 @@ Whoosh is a web app that lets you transfer files between devices on the same WiF
 
 Whoosh combines three technologies:
 
-1. **ggwave (WASM)** — Encodes/decodes data as ultrasonic audio tones for device discovery
+1. **ggwave (WASM)** — Encodes/decodes data as audio tones for device discovery
 2. **WebRTC DataChannel** — Establishes direct peer-to-peer connection for file transfer
 3. **Web Audio API** — Plays and captures audio for the discovery handshake
 
@@ -93,9 +93,10 @@ See [Architecture.md](Architecture.md) for detailed technical documentation.
 
 5. **Test with two devices:**
    - Open the same URL on two devices on the same WiFi
-   - Tap "Start Discovery" on both
-   - Wait for devices to appear on the radar; discovery retries for about 40 seconds
-   - Tap a device to send a file
+   - Tap "Start Sending" on the sending device
+   - Tap "Ready to Receive" on the receiving device
+   - When the sender appears on the receiver, tap it to send the answer tone
+   - After the connection opens on the sender, choose a file to send
 
 ---
 
@@ -156,9 +157,9 @@ lib/ggwave/
 ### Step 3: Test
 
 1. Open the app on two devices
-2. Tap "Start Discovery" on both
-3. You should hear repeated faint ultrasonic tones (or nothing if using ultrasonic mode)
-4. Devices should appear on the radar within 5-10 seconds; if nothing is found after about 40 seconds, discovery stops so you can retry cleanly
+2. Tap "Start Sending" on the sender and "Ready to Receive" on the receiver
+3. You should hear repeated short tones from the sender while discovery is active
+4. The sender should appear on the receiver within 5-10 seconds; tap it to respond with an answer tone
 
 ---
 
@@ -256,7 +257,7 @@ The codebase is modular:
 
 ### Browser Limitations
 
-- **iOS Safari** — Requires user tap before audio (handled by "Start Discovery" button)
+- **iOS Safari** — Requires user tap before audio (handled by the Start Sending/Ready to Receive buttons)
 - **Background tabs** — Audio may be throttled, keep tab active
 - **Ultrasonic support** — Some devices can't produce/capture 18-22kHz frequencies
 

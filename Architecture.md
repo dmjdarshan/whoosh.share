@@ -7,7 +7,7 @@
 
 ## The Core Idea
 
-Two devices open the same webpage. They discover each other using **sound** — an ultrasonic tone plays through one device's speaker, the other device's mic picks it up and decodes it. A direct WebRTC connection is established. Files transfer peer-to-peer at full local Wi-Fi speed. Nothing leaves the local network.
+Two devices open the same webpage. They discover each other using **sound** — a tone plays through one device's speaker, the other device's mic picks it up and decodes it. A direct WebRTC connection is established. Files transfer peer-to-peer at full local Wi-Fi speed. Nothing leaves the local network.
 
 ---
 
@@ -42,10 +42,10 @@ The browser sandbox blocks UDP broadcast, mDNS multicast, BLE advertising, and r
 Device A (Sender)                        Device B (Receiver)
 ─────────────────                        ────────────────────
 
-1. User taps "Start"
-2. Broadcast device presence for up to ~40 seconds while listening
-3. Create WebRTC offer (SDP ~500 bytes) after a peer is selected
-4. Encode offer via ggwave → audio tones
+1. Sender taps "Start Sending"; receiver taps "Ready to Receive"
+2. Sender creates WebRTC offer
+3. Sender repeatedly encodes offer via ggwave → audio tones
+4. Receiver decodes offer and taps sender to accept
 5. Play tones through speaker
                           ────────────►  6. Mic captures tones
                                          7. ggwave decodes → SDP offer
@@ -70,7 +70,7 @@ Device A (Sender)                        Device B (Receiver)
 - Decodes tones back to bytes from mic input
 - WASM build available — runs in browser at native speed
 - Includes Reed-Solomon error correction for ambient noise resilience
-- Ultrasonic mode (18-22kHz, inaudible) or audible mode as fallback
+- Audible mode for the MVP path; ultrasonic mode can be added later as a preference with fallback
 - The WebRTC SDP payload is ~500 bytes — transmits in ~5 seconds
 
 ### File Transfer — WebRTC DataChannel
@@ -132,17 +132,17 @@ const payload = JSON.stringify({
 })
 
 // Encode and play
-ggwave.encode(payload, GGWave.ProtocolId.ULTRASOUND_FASTEST)
+ggwave.encode(payload, GGWave.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FASTEST)
 ```
 
 ```javascript
-// Receiver side — mic always listening after "Start" tap
+// Receiver side — mic always listening after "Ready to Receive" tap
 ggwave.onRxData = async (data) => {
   const offer = JSON.parse(data)
   await pc.setRemoteDescription(offer)
   const answer = await pc.createAnswer()
   await pc.setLocalDescription(answer)
-  ggwave.encode(JSON.stringify(answer), GGWave.ProtocolId.ULTRASOUND_FASTEST)
+  ggwave.encode(JSON.stringify(answer), GGWave.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FASTEST)
 }
 ```
 
@@ -172,11 +172,11 @@ for (let offset = 0; offset < buffer.byteLength; offset += CHUNK_SIZE) {
 |---|---|---|---|
 | Chrome Android | ✅ | ✅ | Primary target |
 | Chrome Desktop | ✅ | ✅ | Primary target |
-| Safari iOS 16+ | ⚠️ Needs testing | ✅ | Requires user gesture before audio (tap "Start") |
+| Safari iOS 16+ | ⚠️ Needs testing | ✅ | Requires user gesture before audio (tap Start Sending or Ready to Receive) |
 | Safari macOS | ⚠️ Needs testing | ✅ | Same as iOS |
 | Firefox | ✅ | ✅ | |
 
-**iOS note:** Safari suspends AudioContext until a user gesture. The "Start Discovery" button tap serves as that gesture. This should unblock iOS — wave-share's iOS issues were reported in 2019 on older Safari. Modern iOS Safari (16+) has significantly improved Web Audio support. Needs real device testing.
+**iOS note:** Safari suspends AudioContext until a user gesture. The Start Sending or Ready to Receive button tap serves as that gesture. This should unblock iOS — wave-share's iOS issues were reported in 2019 on older Safari. Modern iOS Safari (16+) has significantly improved Web Audio support. Needs real device testing.
 
 ---
 
@@ -286,7 +286,8 @@ The first screen a user sees. App is not yet listening.
 │    devices"                 │
 │                             │
 │   ┌─────────────────────┐   │
-│   │   Start Discovery   │   │  ← primary CTA button, accent blue
+│   │   Start Sending     │   │  ← primary CTA button, accent blue
+│   │  Ready to Receive   │   │  ← secondary action
 │   └─────────────────────┘   │
 │                             │
 │   Your device: Rohan's      │  ← 13px, text-tertiary
@@ -296,7 +297,7 @@ The first screen a user sees. App is not yet listening.
 
 #### Screen 2 — Listening / Scanning
 
-User tapped "Start Discovery". Mic is active. Sound is being broadcast. Waiting for other devices.
+User tapped Start Sending. Mic is active and offer tones are being broadcast. A receiving device should tap Ready to Receive.
 
 ```
 ┌─────────────────────────────┐
@@ -568,7 +569,7 @@ These details separate a polished app from a generic one. Implement all of them.
 
 1. **Never show technical terms.** No "WebRTC", "SDP", "ICE candidates", "DataChannel". Ever.
 2. **Sound hint is mandatory.** Always show "Keep volume up" during discovery. Users will think it's broken otherwise.
-3. **WakeLock during discovery.** Request `navigator.wakeLock.request('screen')` immediately on "Start Discovery" tap. Release on cancel or after connection. Without this, screen dims and mic capture can be interrupted.
+3. **WakeLock during discovery.** Request `navigator.wakeLock.request('screen')` immediately on Start Sending or Ready to Receive tap. Release on cancel or after connection. Without this, screen dims and mic capture can be interrupted.
 4. **File drag-and-drop on desktop.** The entire radar area should be a drop target when a device is selected — not just the sheet's drop zone. Dragging a file onto the app should naturally open the send flow.
 5. **One file at a time for MVP.** Don't complicate the UI with multi-file queues initially.
 6. **No settings screen.** Nothing to configure. If something needs a choice, make the right default.
@@ -584,11 +585,11 @@ These details separate a polished app from a generic one. Implement all of them.
 Both mic and (on some browsers) audio output require user permission. Handle gracefully.
 
 ```
-User taps "Start Discovery"
+User taps Start Sending or Ready to Receive
         ↓
 Request mic permission
         ↓
-[ Granted ]─────────────────→ Start listening + broadcasting
+[ Granted ]─────────────────→ Start listening; Start Sending also transmits offers
         ↓
 [ Denied ]
         ↓
@@ -606,9 +607,10 @@ Never use `alert()` for permission errors. Show an inline state within the UI, s
 The first thing to validate on real hardware:
 
 1. Two devices open the page
-2. Both tap "Start Discovery"
-3. Sound plays, connection establishes
-4. One file transfers successfully
+2. Sender taps Start Sending; receiver taps Ready to Receive
+3. Receiver decodes the offer and taps the sender to answer
+4. Sound plays, connection establishes
+5. One file transfers successfully
 
 Everything else — multiple files, transfer history, pretty UI, resumption — comes after this works.
 
