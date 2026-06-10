@@ -26,7 +26,7 @@ export class TransferManager {
   }
 
   // Send file through data channel
-  async sendFile(file, dataChannel) {
+  async sendFile(file, dataChannel, senderDevice = null) {
     console.log('[Transfer] Starting file send:', file.name, file.size);
 
     this.cancelled = false;
@@ -44,7 +44,9 @@ export class TransferManager {
         type: 'metadata',
         name: file.name,
         size: file.size,
-        mimeType: file.type
+        mimeType: file.type,
+        deviceName: senderDevice ? senderDevice.name : undefined,
+        deviceType: senderDevice ? senderDevice.type : undefined
       };
       dataChannel.send(JSON.stringify(metadata));
 
@@ -110,52 +112,58 @@ export class TransferManager {
     console.log('[Transfer] Setting up receiver...');
 
     dataChannel.onmessage = async (event) => {
-      try {
-        // Try to parse as JSON (metadata or control message)
-        if (typeof event.data === 'string') {
-          const message = JSON.parse(event.data);
-          
-          if (message.type === 'metadata') {
-            // Start receiving file
-            console.log('[Transfer] Receiving file:', message.name, message.size);
-            
-            this.receivingFile = {
-              name: message.name,
-              size: message.size,
-              mimeType: message.mimeType,
-              chunks: [],
-              received: 0,
-              startTime: Date.now()
-            };
-
-            this.emit('receiving', {
-              name: message.name,
-              size: message.size,
-              mimeType: message.mimeType
-            });
-
-          } else if (message.type === 'complete') {
-            // File transfer complete
-            console.log('[Transfer] File receive complete');
-            await this.finalizeReceivedFile();
-          }
-
-        } else {
-          // Binary data (file chunk)
-          if (this.receivingFile) {
-            this.receivingFile.chunks.push(event.data);
-            this.receivingFile.received += event.data.byteLength;
-
-            // Emit progress
-            this.emitReceiveProgress();
-          }
-        }
-
-      } catch (error) {
-        console.error('[Transfer] Receive error:', error);
-        this.emit('error', error);
-      }
+      await this.handleIncomingMessage(event.data);
     };
+  }
+
+  async handleIncomingMessage(data) {
+    try {
+      if (typeof data === 'string') {
+        await this.handleControlMessage(JSON.parse(data));
+        return;
+      }
+
+      this.handleChunk(data);
+    } catch (error) {
+      console.error('[Transfer] Receive error:', error);
+      this.emit('error', error);
+    }
+  }
+
+  async handleControlMessage(message) {
+    if (message.type === 'metadata') {
+      console.log('[Transfer] Receiving file:', message.name, message.size);
+
+      this.receivingFile = {
+        name: message.name,
+        size: message.size,
+        mimeType: message.mimeType,
+        chunks: [],
+        received: 0,
+        startTime: Date.now()
+      };
+
+      this.emit('receiving', {
+        name: message.name,
+        size: message.size,
+        mimeType: message.mimeType,
+        deviceName: message.deviceName,
+        deviceType: message.deviceType
+      });
+    } else if (message.type === 'complete') {
+      console.log('[Transfer] File receive complete');
+      await this.finalizeReceivedFile();
+    }
+  }
+
+  handleChunk(chunk) {
+    if (!this.receivingFile) {
+      return;
+    }
+
+    this.receivingFile.chunks.push(chunk);
+    this.receivingFile.received += chunk.byteLength || chunk.size || 0;
+    this.emitReceiveProgress();
   }
 
   // Finalize received file
@@ -202,7 +210,9 @@ export class TransferManager {
     this.emit('progress', {
       transferred: this.currentTransfer.transferred,
       total: this.currentTransfer.total,
-      percentage: (this.currentTransfer.transferred / this.currentTransfer.total) * 100,
+      percentage: this.currentTransfer.total === 0
+        ? 100
+        : (this.currentTransfer.transferred / this.currentTransfer.total) * 100,
       speed: speed,
       eta: eta
     });
@@ -222,7 +232,9 @@ export class TransferManager {
     this.emit('progress', {
       transferred: this.receivingFile.received,
       total: this.receivingFile.size,
-      percentage: (this.receivingFile.received / this.receivingFile.size) * 100,
+      percentage: this.receivingFile.size === 0
+        ? 100
+        : (this.receivingFile.received / this.receivingFile.size) * 100,
       speed: speed,
       eta: eta
     });
@@ -261,7 +273,9 @@ export class TransferManager {
       return {
         type: 'sending',
         file: this.currentTransfer.file.name,
-        progress: (this.currentTransfer.transferred / this.currentTransfer.total) * 100
+        progress: this.currentTransfer.total === 0
+          ? 100
+          : (this.currentTransfer.transferred / this.currentTransfer.total) * 100
       };
     }
 
@@ -269,12 +283,12 @@ export class TransferManager {
       return {
         type: 'receiving',
         file: this.receivingFile.name,
-        progress: (this.receivingFile.received / this.receivingFile.size) * 100
+        progress: this.receivingFile.size === 0
+          ? 100
+          : (this.receivingFile.received / this.receivingFile.size) * 100
       };
     }
 
     return null;
   }
 }
-
-

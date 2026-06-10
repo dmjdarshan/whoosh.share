@@ -6,9 +6,12 @@ export class DiscoveryManager {
     this.eventHandlers = new Map();
     this.audioContext = null;
     this.ggwave = null;
+    this.ggwaveInstance = null;
     this.isListening = false;
     this.micStream = null;
     this.audioWorkletNode = null;
+    this.audioSource = null;
+    this.protocol = null;
   }
 
   // Event emitter pattern
@@ -84,18 +87,19 @@ export class DiscoveryManager {
       // Initialize ggwave
       this.ggwave = await window.ggwave_factory();
 
-      // Initialize ggwave instance with parameters
-      // Parameters: sampleRate, sampleRateInp, sampleRateOut, samplesPerFrame, sampleFormatInp, sampleFormatOut
+      // Initialize this ggwave build with its current single-parameter API.
       const sampleRate = this.audioContext.sampleRate;
-      const samplesPerFrame = 1024;
-      await this.ggwave.init(
-        sampleRate,  // Sample rate
-        sampleRate,  // Input sample rate
-        sampleRate,  // Output sample rate
-        samplesPerFrame,  // Samples per frame
-        this.ggwave.SampleFormat.F32,  // Input format (Float32)
-        this.ggwave.SampleFormat.F32   // Output format (Float32)
-      );
+      const params = this.ggwave.getDefaultParameters();
+      params.sampleRate = sampleRate;
+      params.sampleRateInp = sampleRate;
+      params.sampleRateOut = sampleRate;
+      params.samplesPerFrame = 1024;
+      params.sampleFormatInp = this.ggwave.SampleFormat.GGWAVE_SAMPLE_FORMAT_I8;
+      params.sampleFormatOut = this.ggwave.SampleFormat.GGWAVE_SAMPLE_FORMAT_I8;
+      params.operatingMode = this.ggwave.GGWAVE_OPERATING_MODE_RX_AND_TX;
+
+      this.ggwaveInstance = this.ggwave.init(params);
+      this.protocol = this.ggwave.ProtocolId.GGWAVE_PROTOCOL_ULTRASOUND_FASTEST;
 
       console.log("[Discovery] ggwave WASM loaded and initialized successfully");
       console.log("[Discovery] Sample rate:", sampleRate);
@@ -111,6 +115,12 @@ export class DiscoveryManager {
   // Helper to load external script
   loadScript(src) {
     return new Promise((resolve, reject) => {
+      const existingScript = document.querySelector(`script[src="${src}"]`);
+      if (existingScript) {
+        resolve();
+        return;
+      }
+
       const script = document.createElement("script");
       script.src = src;
       script.onload = resolve;
@@ -150,6 +160,7 @@ export class DiscoveryManager {
       source.connect(processor);
       processor.connect(this.audioContext.destination);
 
+      this.audioSource = source;
       this.audioWorkletNode = processor;
       this.isListening = true;
 
@@ -162,29 +173,27 @@ export class DiscoveryManager {
 
   // Process incoming audio data
   processAudioInput(samples) {
-    if (!this.ggwave) {
+    if (!this.ggwave || this.ggwaveInstance === null) {
       return;
     }
 
     try {
-      // Decode audio samples using ggwave
-      // Second parameter is the protocol ID (same as encode)
-      const PROTOCOL_ULTRASOUND_FASTEST = 1;
-      const decoded = this.ggwave.decode(samples, PROTOCOL_ULTRASOUND_FASTEST);
+      const pcmSamples = this.floatToInt8(samples);
+      const decodedBytes = this.ggwave.decode(this.ggwaveInstance, pcmSamples);
 
-      if (decoded && decoded.length > 0) {
+      if (decodedBytes && decodedBytes.length > 0) {
+        const decoded = new TextDecoder().decode(decodedBytes);
         console.log("[Discovery] Decoded data:", decoded.length, "chars");
 
-        // ggwave returns a string directly, not bytes
         const data = JSON.parse(decoded);
 
         // Handle different message types
         if (data.type === "device") {
           this.emit("deviceFound", data.device);
         } else if (data.type === "offer") {
-          this.emit("offerReceived", data.offer);
+          this.emit("offerReceived", data);
         } else if (data.type === "answer") {
-          this.emit("answerReceived", data.answer);
+          this.emit("answerReceived", data);
         }
       }
     } catch (error) {
@@ -203,6 +212,11 @@ export class DiscoveryManager {
     if (this.audioWorkletNode) {
       this.audioWorkletNode.disconnect();
       this.audioWorkletNode = null;
+    }
+
+    if (this.audioSource) {
+      this.audioSource.disconnect();
+      this.audioSource = null;
     }
 
     if (this.micStream) {
@@ -226,25 +240,28 @@ export class DiscoveryManager {
   }
 
   // Send WebRTC offer via audio
-  async sendOffer(offer, targetDeviceId) {
+  async sendOffer(offer, targetDeviceId, fromDevice) {
     console.log("[Discovery] Sending offer to:", targetDeviceId);
 
     const message = {
       type: "offer",
       offer: offer,
       targetId: targetDeviceId,
+      from: fromDevice,
     };
 
     await this.transmit(message);
   }
 
   // Send WebRTC answer via audio
-  async sendAnswer(answer) {
+  async sendAnswer(answer, targetDeviceId, fromDevice) {
     console.log("[Discovery] Sending answer");
 
     const message = {
       type: "answer",
       answer: answer,
+      targetId: targetDeviceId,
+      from: fromDevice,
     };
 
     await this.transmit(message);
@@ -252,7 +269,7 @@ export class DiscoveryManager {
 
   // Transmit data via audio
   async transmit(data) {
-    if (!this.ggwave || !this.audioContext) {
+    if (!this.ggwave || this.ggwaveInstance === null || !this.audioContext) {
       throw new Error("ggwave not initialized");
     }
 
@@ -262,15 +279,12 @@ export class DiscoveryManager {
 
       console.log("[Discovery] Transmitting:", json.length, "bytes");
 
-      // Encode to audio using ggwave
-      // Protocol: ULTRASOUND_FASTEST (18-22kHz, inaudible)
-      const PROTOCOL_ULTRASOUND_FASTEST = 1;
       const volume = 10; // Volume level (0-100)
       const audioSamples = this.ggwave.encode(
+        this.ggwaveInstance,
         json, // Pass string directly, not Uint8Array
-        PROTOCOL_ULTRASOUND_FASTEST,
+        this.protocol,
         volume,
-        false // useAGC (automatic gain control)
       );
 
       // Play audio through speakers
@@ -294,8 +308,11 @@ export class DiscoveryManager {
           this.audioContext.sampleRate,
         );
 
-        // Copy samples to buffer
-        buffer.getChannelData(0).set(samples);
+        // ggwave emits signed PCM bytes for this build; Web Audio expects -1..1 floats.
+        const channel = buffer.getChannelData(0);
+        for (let i = 0; i < samples.length; i++) {
+          channel[i] = samples[i] / 128;
+        }
 
         // Create buffer source
         const source = this.audioContext.createBufferSource();
@@ -311,6 +328,17 @@ export class DiscoveryManager {
     });
   }
 
+  floatToInt8(samples) {
+    const pcmSamples = new Int8Array(samples.length);
+
+    for (let i = 0; i < samples.length; i++) {
+      const sample = Math.max(-1, Math.min(1, samples[i]));
+      pcmSamples[i] = Math.round(sample * 127);
+    }
+
+    return pcmSamples;
+  }
+
   // Clean up resources
   cleanup() {
     console.log("[Discovery] Cleaning up...");
@@ -322,11 +350,11 @@ export class DiscoveryManager {
       this.audioContext = null;
     }
 
-    if (this.ggwave && this.ggwave.free) {
-      this.ggwave.free();
-      this.ggwave = null;
+    if (this.ggwave && this.ggwave.free && this.ggwaveInstance !== null) {
+      this.ggwave.free(this.ggwaveInstance);
+      this.ggwaveInstance = null;
     }
+
+    this.ggwave = null;
   }
 }
-
-

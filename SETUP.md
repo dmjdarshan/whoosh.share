@@ -31,9 +31,11 @@ cd whoosh.share
 # Or download ZIP and extract
 ```
 
-### 2. Download ggwave WASM Files
+### 2. Verify ggwave WASM Files
 
-**This is the most important step!** The app won't work without these files.
+**This is the most important step!** The app won't work without a compatible ggwave browser build.
+
+This repository currently includes `lib/ggwave/ggwave.js`, a self-contained build that exposes `window.ggwave_factory` and embeds the WASM payload. If you replace it with a different upstream build, that build may also require a separate `ggwave.wasm` file.
 
 #### Option A: Download from ggwave Demo (Easiest)
 
@@ -41,10 +43,9 @@ cd whoosh.share
 2. Open browser DevTools (F12 or Cmd+Option+I)
 3. Go to **Network** tab
 4. Refresh the page
-5. Find and download:
-   - `ggwave.js` (right-click → Save as)
-   - `ggwave.wasm` (right-click → Save as)
-6. Place both files in `lib/ggwave/` directory
+5. Find and download `ggwave.js` (right-click → Save as)
+6. If that build loads an external WASM file, also download `ggwave.wasm`
+7. Place the file(s) in `lib/ggwave/` directory
 
 #### Option B: Build from Source
 
@@ -63,7 +64,7 @@ make
 
 # Copy files
 cp examples/ggwave-wasm/ggwave.js /path/to/whoosh.share/lib/ggwave/
-cp examples/ggwave-wasm/ggwave.wasm /path/to/whoosh.share/lib/ggwave/
+cp examples/ggwave-wasm/ggwave.wasm /path/to/whoosh.share/lib/ggwave/ # only if generated separately
 ```
 
 ### 3. Verify File Structure
@@ -84,30 +85,10 @@ whoosh.share/
 │   └── transfer.js
 └── lib/
     └── ggwave/
-        ├── ggwave.js      ← Must exist
-        └── ggwave.wasm    ← Must exist
+        └── ggwave.js      ← Must exist; current build embeds WASM
 ```
 
-### 4. Update discovery.js (Enable Real ggwave)
-
-Open `src/discovery.js` and find the `loadGGWave()` method (around line 60).
-
-Replace this:
-```javascript
-// Mock implementation for development
-this.ggwave = this.createMockGGWave();
-```
-
-With this:
-```javascript
-// Load real ggwave WASM
-const GGWave = await import('../lib/ggwave/ggwave.js');
-this.ggwave = await GGWave.init({
-  wasmPath: '/lib/ggwave/ggwave.wasm'
-});
-```
-
-### 5. Start Local Server
+### 4. Start Local Server
 
 You **must** serve the app over HTTP/HTTPS (not `file://`) for microphone access.
 
@@ -141,7 +122,7 @@ php -S localhost:8000
 
 Install "Live Server" extension and click "Go Live" button.
 
-### 6. Open in Browser
+### 5. Open in Browser
 
 ```
 http://localhost:8000
@@ -149,7 +130,7 @@ http://localhost:8000
 
 **Important:** Use `localhost`, not `127.0.0.1` or your local IP, for initial testing. Some browsers have stricter permissions for non-localhost addresses.
 
-### 7. Test on Two Devices
+### 6. Test on Two Devices
 
 #### Same Computer (Quick Test)
 
@@ -200,10 +181,10 @@ http://localhost:8000
 **Cause:** ggwave WASM files are missing or not loading.
 
 **Solution:**
-1. Check that `lib/ggwave/ggwave.js` and `lib/ggwave/ggwave.wasm` exist
+1. Check that `lib/ggwave/ggwave.js` exists
 2. Open browser DevTools → Network tab
 3. Refresh page and check if files load (should be 200 OK, not 404)
-4. Verify you updated `src/discovery.js` to load real ggwave
+4. If using a separate WASM build, verify `ggwave.wasm` also loads successfully
 
 ### Devices not discovering each other
 
@@ -221,22 +202,22 @@ http://localhost:8000
    - Some devices can't produce/capture 18-22kHz frequencies
    - Try audible mode (see below)
 
-4. **Still using mock ggwave**
-   - Check browser console for "Using MOCK ggwave" warning
-   - Follow Step 4 above to enable real ggwave
+4. **Incompatible ggwave build**
+   - Check browser console for binding errors from `init`, `encode`, or `decode`
+   - Verify the build exposes `window.ggwave_factory`
 
 ### Testing with Audible Mode
 
 If ultrasonic isn't working, test with audible tones:
 
-In `src/discovery.js`, change the protocol:
+In `src/discovery.js`, change the assigned protocol:
 
 ```javascript
-// Find this line (around line 230):
-const PROTOCOL_ULTRASOUND_FASTEST = 1;
+// Find this line in loadGGWave():
+this.protocol = this.ggwave.ProtocolId.GGWAVE_PROTOCOL_ULTRASOUND_FASTEST;
 
 // Change to audible mode:
-const PROTOCOL_AUDIBLE_FASTEST = 0;
+this.protocol = this.ggwave.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FASTEST;
 ```
 
 You should hear beeping sounds during discovery.
