@@ -2,18 +2,18 @@
 // TEMPORARILY DISABLED FOR DEVELOPMENT
 // Caches app shell for offline use
 
-const CACHE_NAME = 'whoosh-v5-disabled';
+const CACHE_NAME = 'whoosh-v6';
 const CACHING_DISABLED = true; // Set to false to re-enable caching
 const APP_SHELL = [
-  '/',
-  '/index.html',
-  '/styles.css',
-  '/manifest.json',
-  '/src/main.js',
-  '/src/ui.js',
-  '/src/discovery.js',
-  '/src/connection.js',
-  '/src/transfer.js'
+  './',
+  './index.html',
+  './styles.css',
+  './manifest.json',
+  './src/main.js',
+  './src/ui.js',
+  './src/discovery.js',
+  './src/connection.js',
+  './src/transfer.js'
 ];
 
 // Install event — cache app shell

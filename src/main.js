@@ -270,7 +270,7 @@ class WhooshApp {
   async registerServiceWorker() {
     if ('serviceWorker' in navigator) {
       try {
-        const registration = await navigator.serviceWorker.register('/sw.js');
+        const registration = await navigator.serviceWorker.register('./sw.js');
         console.log('[Whoosh] Service Worker registered:', registration);
       } catch (error) {
         console.warn('[Whoosh] Service Worker registration failed:', error);

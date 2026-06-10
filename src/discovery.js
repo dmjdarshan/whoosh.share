@@ -71,7 +71,7 @@ export class DiscoveryManager {
 
     try {
       // Load the ggwave script (it now exposes window.ggwave_factory)
-      await this.loadScript("../lib/ggwave/ggwave.js");
+      await this.loadScript("./lib/ggwave/ggwave.js");
 
       // Wait for the script to fully initialize
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -84,16 +84,21 @@ export class DiscoveryManager {
       // Initialize ggwave
       this.ggwave = await window.ggwave_factory();
 
-      console.log("[Discovery] ggwave WASM loaded successfully");
-      console.log("[Discovery] ggwave methods:", Object.keys(this.ggwave));
-      
-      // Check if encode/decode exist and their signatures
-      if (this.ggwave.encode) {
-        console.log("[Discovery] encode function:", this.ggwave.encode.toString().substring(0, 200));
-      }
-      if (this.ggwave.decode) {
-        console.log("[Discovery] decode function:", this.ggwave.decode.toString().substring(0, 200));
-      }
+      // Initialize ggwave instance with parameters
+      // Parameters: sampleRate, sampleRateInp, sampleRateOut, samplesPerFrame, sampleFormatInp, sampleFormatOut
+      const sampleRate = this.audioContext.sampleRate;
+      const samplesPerFrame = 1024;
+      await this.ggwave.init(
+        sampleRate,  // Sample rate
+        sampleRate,  // Input sample rate
+        sampleRate,  // Output sample rate
+        samplesPerFrame,  // Samples per frame
+        this.ggwave.SampleFormat.F32,  // Input format (Float32)
+        this.ggwave.SampleFormat.F32   // Output format (Float32)
+      );
+
+      console.log("[Discovery] ggwave WASM loaded and initialized successfully");
+      console.log("[Discovery] Sample rate:", sampleRate);
       return;
     } catch (error) {
       console.error("[Discovery] Failed to load ggwave:", error);

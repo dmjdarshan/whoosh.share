@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generate Whoosh Icons</title>
+</head>
+<body>
+    <h1>Whoosh Icon Generator</h1>
+    <p>Right-click each canvas and "Save image as..." to create the icon files.</p>
+    
+    <h2>icon-192.png (192x192)</h2>
+    <canvas id="icon192" width="192" height="192"></canvas>
+    
+    <h2>icon-512.png (512x512)</h2>
+    <canvas id="icon512" width="512" height="512"></canvas>
+    
+    <script>
+        function drawIcon(canvas) {
+            const ctx = canvas.getContext('2d');
+            const size = canvas.width;
+            
+            // Background - iOS blue gradient
+            const gradient = ctx.createLinearGradient(0, 0, 0, size);
+            gradient.addColorStop(0, '#007AFF');
+            gradient.addColorStop(1, '#0051D5');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, size, size);
+            
+            // Draw "whoosh" wave symbol
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = size * 0.08;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            // Three curved lines representing sound waves
+            const centerY = size / 2;
+            const waveHeight = size * 0.15;
+            
+            for (let i = 0; i < 3; i++) {
+                ctx.beginPath();
+                const y = centerY + (i - 1) * waveHeight;
+                const startX = size * 0.2;
+                const endX = size * 0.8;
+                const cp1X = size * 0.35;
+                const cp2X = size * 0.65;
+                
+                ctx.moveTo(startX, y);
+                ctx.bezierCurveTo(cp1X, y - waveHeight * 0.5, cp2X, y + waveHeight * 0.5, endX, y);
+                ctx.stroke();
+            }
+        }
+        
+        drawIcon(document.getElementById('icon192'));
+        drawIcon(document.getElementById('icon512'));
+    </script>
+</body>
+</html>
