@@ -1,10 +1,10 @@
 // Whoosh.share — Main Entry Point
 // Orchestrates the entire application flow
 
-import { UIManager } from './ui.js';
-import { DiscoveryManager } from './discovery.js';
-import { ConnectionManager } from './connection.js';
-import { TransferManager } from './transfer.js';
+import { UIManager } from './ui.js?v=2';
+import { DiscoveryManager } from './discovery.js?v=3';
+import { ConnectionManager } from './connection.js?v=2';
+import { TransferManager } from './transfer.js?v=2';
 
 class WhooshApp {
   constructor() {
@@ -297,6 +297,7 @@ class WhooshApp {
   async handleOfferReceived(message) {
     if ((message.targetId && message.targetId !== this.localDevice.id) ||
         (message.from && message.from.id === this.localDevice.id)) {
+      console.log('[Whoosh] Ignoring own offer');
       return;
     }
 
@@ -341,7 +342,9 @@ class WhooshApp {
   }
 
   async handleAnswerReceived(message) {
-    if (message.targetId && message.targetId !== this.localDevice.id) {
+    if ((message.targetId && message.targetId !== this.localDevice.id) ||
+        (message.from && message.from.id === this.localDevice.id)) {
+      console.log('[Whoosh] Ignoring answer not meant for this device');
       return;
     }
 
