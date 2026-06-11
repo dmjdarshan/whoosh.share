@@ -2,8 +2,8 @@
 // Orchestrates the entire application flow
 
 import { UIManager } from './ui.js?v=2';
-import { DiscoveryManager } from './discovery.js?v=5';
-import { ConnectionManager } from './connection.js?v=4';
+import { DiscoveryManager } from './discovery.js?v=6';
+import { ConnectionManager } from './connection.js?v=5';
 import { TransferManager } from './transfer.js?v=2';
 
 class WhooshApp {
@@ -87,8 +87,8 @@ class WhooshApp {
       this.handleAnswerReceived(message);
     });
 
-    this.discovery.on('soundDetected', ({ rms }) => {
-      this.handleSoundDetected(rms);
+    this.discovery.on('soundDetected', ({ rms, sinceTransmitMs }) => {
+      this.handleSoundDetected(rms, sinceTransmitMs);
     });
 
     this.discovery.on('error', (error) => {
@@ -100,15 +100,22 @@ class WhooshApp {
     // Connection events
     this.connection.on('connected', () => {
       console.log('[Whoosh] WebRTC connected');
-      this.state = 'connected';
       this.stopOfferBroadcast();
       this.clearDiscoveryTimeout();
-      this.clearConnectionTimeout();
-      this.ui.setState('connected');
-      if (this.role === 'sender' && this.currentPeer) {
-        this.ui.showFilePicker(this.currentPeer);
+      this.startConnectionTimeout();
+      this.ui.setStatus('Connecting...');
+
+      if (this.connection.isConnected()) {
+        this.finishWebRtcConnection();
       }
-      this.releaseWakeLock();
+    });
+
+    this.connection.on('checking', () => {
+      this.handleConnectionAttempt();
+    });
+
+    this.connection.on('connecting', () => {
+      this.handleConnectionAttempt();
     });
 
     this.connection.on('disconnected', () => {
@@ -124,6 +131,11 @@ class WhooshApp {
 
     this.connection.on('message', (message) => {
       this.transfer.handleIncomingMessage(message);
+    });
+
+    this.connection.on('dataChannelOpen', () => {
+      console.log('[Whoosh] Data channel open');
+      this.finishWebRtcConnection();
     });
 
     // Transfer events
@@ -538,6 +550,26 @@ class WhooshApp {
     this.releaseWakeLock();
   }
 
+  finishWebRtcConnection() {
+    if (this.state === 'connected') {
+      return;
+    }
+
+    this.state = 'connected';
+    this.isAcceptingOffer = false;
+    this.stopOfferBroadcast();
+    this.offerPauseUntil = 0;
+    this.clearDiscoveryTimeout();
+    this.clearConnectionTimeout();
+    this.ui.setState('connected');
+
+    if (this.role === 'sender' && this.currentPeer) {
+      this.ui.showFilePicker(this.currentPeer);
+    }
+
+    this.releaseWakeLock();
+  }
+
   // Wake Lock API
   async requestWakeLock() {
     if ('wakeLock' in navigator) {
@@ -661,8 +693,27 @@ class WhooshApp {
     return this.OFFER_RETRY_DELAY_MS + Math.floor(Math.random() * this.OFFER_RETRY_JITTER_MS);
   }
 
-  handleSoundDetected(rms) {
+  handleConnectionAttempt() {
+    if (this.role !== 'sender' || this.state !== 'listening') {
+      return;
+    }
+
+    if (this.presenceLoopActive) {
+      console.log('[Whoosh] Receiver started connecting; stopping offer broadcasts');
+    }
+
+    this.stopOfferBroadcast();
+    this.clearDiscoveryTimeout();
+    this.startConnectionTimeout();
+    this.ui.setStatus('Receiver found. Listening for reply...');
+  }
+
+  handleSoundDetected(rms, sinceTransmitMs) {
     if (this.role !== 'sender' || this.state !== 'listening' || !this.presenceLoopActive) {
+      return;
+    }
+
+    if (sinceTransmitMs < 1500) {
       return;
     }
 
