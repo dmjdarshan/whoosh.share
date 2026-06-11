@@ -17,6 +17,7 @@ export class DiscoveryManager {
     this.CHUNK_PAYLOAD_SIZE = 90;
     this.isTransmitting = false;
     this.lastSoundDetectedAt = 0;
+    this.lastTransmitEndedAt = 0;
   }
 
   // Event emitter pattern
@@ -218,7 +219,10 @@ export class DiscoveryManager {
 
     if (rms > 0.025 && now - this.lastSoundDetectedAt > 1000) {
       this.lastSoundDetectedAt = now;
-      this.emit("soundDetected", { rms });
+      this.emit("soundDetected", {
+        rms,
+        sinceTransmitMs: this.lastTransmitEndedAt ? now - this.lastTransmitEndedAt : Infinity
+      });
     }
   }
 
@@ -342,6 +346,7 @@ export class DiscoveryManager {
       throw error;
     } finally {
       this.isTransmitting = false;
+      this.lastTransmitEndedAt = Date.now();
     }
   }
 

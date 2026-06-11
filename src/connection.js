@@ -253,6 +253,9 @@ export class ConnectionManager {
       console.log('[Connection] ICE connection state:', this.pc.iceConnectionState);
 
       switch (this.pc.iceConnectionState) {
+        case 'checking':
+          this.emit('checking');
+          break;
         case 'connected':
         case 'completed':
           this.emit('connected');
@@ -267,6 +270,10 @@ export class ConnectionManager {
 
     this.pc.onconnectionstatechange = () => {
       console.log('[Connection] Connection state:', this.pc.connectionState);
+
+      if (this.pc.connectionState === 'connecting') {
+        this.emit('connecting');
+      }
 
       if (this.pc.connectionState === 'failed') {
         this.emit('error', new Error('Connection failed'));
