@@ -17,13 +17,14 @@ class WhooshApp {
     this.localDevice = null;
     this.currentPeer = null;
     this.role = null; // sender, receiver
+    this.isAcceptingOffer = false;
     this.discoveredDeviceIds = new Set();
     this.presenceLoopActive = false;
     this.discoveryTimeout = null;
     this.outgoingOffer = null;
     this.DISCOVERY_TIMEOUT_MS = 40000;
-    this.OFFER_RETRY_DELAY_MS = 2500;
-    this.OFFER_RETRY_JITTER_MS = 1200;
+    this.OFFER_RETRY_DELAY_MS = 9000;
+    this.OFFER_RETRY_JITTER_MS = 2500;
   }
 
   async init() {
@@ -205,6 +206,7 @@ class WhooshApp {
 
     this.state = 'idle';
     this.role = null;
+    this.isAcceptingOffer = false;
     this.outgoingOffer = null;
     this.ui.setState('idle');
     this.ui.clearDevices();
@@ -274,6 +276,10 @@ class WhooshApp {
     this.clearDiscoveryTimeout();
 
     if (device.pendingOffer) {
+      if (this.isAcceptingOffer) {
+        return;
+      }
+
       await this.acceptOffer(device.pendingOffer);
       return;
     }
@@ -358,7 +364,11 @@ class WhooshApp {
 
   async acceptOffer(message) {
     try {
+      this.isAcceptingOffer = true;
       this.currentPeer = message.from || this.currentPeer;
+      this.ui.clearDevices();
+      this.ui.setStatus('Replying with sound...');
+      this.discovery.stopListening();
 
       const offer = message.compact
         ? this.connection.expandCompactSignal(message.compact).description
@@ -366,12 +376,25 @@ class WhooshApp {
       const answer = await this.connection.handleOffer(offer);
       const compactAnswer = this.connection.createCompactSignal('answer', this.localDevice);
 
-      await this.discovery.sendCompactSignal(compactAnswer);
+      await this.sendAnswerRetries(compactAnswer);
 
       this.ui.setStatus('Connecting...');
     } catch (error) {
       console.error('[Whoosh] Failed to accept offer:', error);
+      this.isAcceptingOffer = false;
       this.ui.showError(this.getHumanReadableError(error));
+    }
+  }
+
+  async sendAnswerRetries(compactAnswer) {
+    const attempts = 3;
+
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      await this.discovery.sendCompactSignal(compactAnswer);
+
+      if (attempt < attempts - 1) {
+        await this.sleep(1800);
+      }
     }
   }
 
@@ -442,6 +465,7 @@ class WhooshApp {
     this.state = 'idle';
     this.currentPeer = null;
     this.role = null;
+    this.isAcceptingOffer = false;
     this.stopOfferBroadcast();
     this.clearDiscoveryTimeout();
     this.ui.setState('idle');
