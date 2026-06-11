@@ -1,10 +1,10 @@
 // Whoosh.share — Main Entry Point
 // Orchestrates the entire application flow
 
-import { UIManager } from './ui.js?v=2';
-import { DiscoveryManager } from './discovery.js?v=7';
+import { UIManager } from './ui.js?v=4';
+import { DiscoveryManager } from './discovery.js?v=8';
 import { ConnectionManager } from './connection.js?v=6';
-import { TransferManager } from './transfer.js?v=2';
+import { TransferManager } from './transfer.js?v=3';
 
 class WhooshApp {
   constructor() {
@@ -24,6 +24,7 @@ class WhooshApp {
     this.discoveryTimeout = null;
     this.connectionTimeout = null;
     this.outgoingOffer = null;
+    this.cachedDevices = [];
     this.offerPauseUntil = 0;
     this.DISCOVERY_TIMEOUT_MS = 40000;
     this.CONNECTION_TIMEOUT_MS = 40000;
@@ -41,6 +42,7 @@ class WhooshApp {
 
     this.localDevice = this.getLocalDevice();
     this.ui.setDeviceInfo(this.localDevice.name);
+    this.cachedDevices = this.loadCachedDevices();
 
     // Initialize managers (but don't start yet)
     this.discovery = new DiscoveryManager();
@@ -49,6 +51,7 @@ class WhooshApp {
 
     // Set up event listeners
     this.setupEventListeners();
+    this.refreshCachedDevicesPanel();
 
     // Register service worker
     this.registerServiceWorker();
@@ -60,10 +63,14 @@ class WhooshApp {
     // UI events
     this.ui.on('startBroadcast', () => this.startBroadcast());
     this.ui.on('startListening', () => this.startListening());
-    this.ui.on('cancelDiscovery', () => this.stopDiscovery());
+    this.ui.on('cancelSession', () => this.endSession());
     this.ui.on('deviceSelected', (device) => this.handleDeviceSelected(device));
-    this.ui.on('filePicked', (file) => this.handleFilePicked(file));
+    this.ui.on('filesPicked', (files) => this.handleFilesPicked(files));
     this.ui.on('cancelTransfer', () => this.cancelTransfer());
+    this.ui.on('sendAnother', () => this.sendAnother());
+    this.ui.on('done', () => this.endSession());
+    this.ui.on('cachedDeviceSelected', (deviceId) => this.handleCachedDeviceSelected(deviceId));
+    this.ui.on('clearCachedDevices', () => this.clearCachedDevices());
 
     // Discovery events
     this.discovery.on('deviceFound', (device) => {
@@ -240,6 +247,14 @@ class WhooshApp {
     this.offerPauseUntil = 0;
     this.ui.setState('idle');
     this.ui.clearDevices();
+    this.refreshCachedDevicesPanel();
+  }
+
+  endSession() {
+    console.log('[Whoosh] Ending session...');
+    this.transfer.cancel();
+    this.stopDiscovery();
+    this.ui.hideBottomSheet();
   }
 
   async broadcastOffer() {
@@ -510,18 +525,29 @@ class WhooshApp {
     }
   }
 
-  async handleFilePicked(file) {
-    console.log('[Whoosh] File picked:', file.name, file.size);
+  async handleFilesPicked(files) {
+    const selectedFiles = Array.from(files || []);
+    const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+    console.log('[Whoosh] Files picked:', selectedFiles.length, totalSize);
 
     if (!this.connection.isConnected()) {
       this.ui.showError('Not connected to device');
       return;
     }
 
+    if (selectedFiles.length === 0) {
+      return;
+    }
+
     try {
       this.state = 'transferring';
-      this.ui.showSending(file, this.currentPeer);
-      await this.transfer.sendFile(file, this.connection.getDataChannel(), this.localDevice);
+      this.ui.setState('transferring');
+      this.ui.showSending({
+        name: selectedFiles.length === 1 ? selectedFiles[0].name : `${selectedFiles.length} files`,
+        size: totalSize,
+        totalFiles: selectedFiles.length
+      }, this.currentPeer);
+      await this.transfer.sendFiles(selectedFiles, this.connection.getDataChannel(), this.localDevice);
     } catch (error) {
       console.error('[Whoosh] Failed to send file:', error);
       this.ui.showError(this.getHumanReadableError(error));
@@ -532,8 +558,23 @@ class WhooshApp {
   cancelTransfer() {
     console.log('[Whoosh] Cancelling transfer...');
     this.transfer.cancel();
+    this.endSession();
+  }
+
+  sendAnother() {
+    if (!this.connection.isConnected()) {
+      this.ui.showError('Connection ended. Start sending again.');
+      this.endSession();
+      return;
+    }
+
+    if (this.role !== 'sender' || !this.currentPeer) {
+      this.ui.setState('connected');
+      return;
+    }
+
     this.state = 'connected';
-    this.ui.setState('connected');
+    this.ui.showFilePicker(this.currentPeer);
   }
 
   handleDisconnection() {
@@ -548,6 +589,7 @@ class WhooshApp {
     this.clearConnectionTimeout();
     this.ui.setState('idle');
     this.ui.clearDevices();
+    this.refreshCachedDevicesPanel();
     this.releaseWakeLock();
   }
 
@@ -563,12 +605,71 @@ class WhooshApp {
     this.clearDiscoveryTimeout();
     this.clearConnectionTimeout();
     this.ui.setState('connected');
+    this.rememberDevice(this.currentPeer);
 
     if (this.role === 'sender' && this.currentPeer) {
       this.ui.showFilePicker(this.currentPeer);
     }
 
     this.releaseWakeLock();
+  }
+
+  handleCachedDeviceSelected(deviceId) {
+    const device = this.cachedDevices.find((item) => item.id === deviceId);
+    if (!device) {
+      return;
+    }
+
+    if (this.connection.isConnected() && this.currentPeer && this.currentPeer.id === device.id && this.role === 'sender') {
+      this.ui.hideSidePanel();
+      this.ui.showFilePicker(this.currentPeer);
+      return;
+    }
+
+    this.ui.showError('Start sending again to reconnect. Saved devices are local history, not reusable sessions.');
+  }
+
+  rememberDevice(device) {
+    if (!device || !device.id) {
+      return;
+    }
+
+    const savedDevice = {
+      id: device.id,
+      name: device.name || 'Nearby device',
+      type: device.type || 'laptop',
+      lastSeen: Date.now()
+    };
+
+    this.cachedDevices = [
+      savedDevice,
+      ...this.cachedDevices.filter((item) => item.id !== savedDevice.id)
+    ].slice(0, 8);
+
+    localStorage.setItem('whoosh-recent-devices', JSON.stringify(this.cachedDevices));
+    this.refreshCachedDevicesPanel();
+  }
+
+  loadCachedDevices() {
+    try {
+      const raw = localStorage.getItem('whoosh-recent-devices');
+      return raw ? JSON.parse(raw) : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  clearCachedDevices() {
+    this.cachedDevices = [];
+    localStorage.removeItem('whoosh-recent-devices');
+    this.refreshCachedDevicesPanel();
+  }
+
+  refreshCachedDevicesPanel() {
+    const activeDeviceId = this.connection && this.connection.isConnected() && this.currentPeer
+      ? this.currentPeer.id
+      : null;
+    this.ui.setCachedDevices(this.cachedDevices, activeDeviceId);
   }
 
   // Wake Lock API

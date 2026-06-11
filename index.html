@@ -11,13 +11,24 @@
     <title>Whoosh — Share files instantly</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="manifest" href="manifest.json">
-    <link rel="stylesheet" href="styles.css?v=3">
+    <link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
     <div class="app">
         <!-- Header -->
         <header class="app-header">
             <h1 class="app-title">whoosh</h1>
+            <button class="icon-btn" id="devicesBtn" aria-label="Recent devices">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                    <path d="M6 8h.01"></path>
+                    <path d="M10 8h8"></path>
+                    <path d="M6 12h.01"></path>
+                    <path d="M10 12h8"></path>
+                    <path d="M6 16h.01"></path>
+                    <path d="M10 16h8"></path>
+                </svg>
+            </button>
         </header>
 
         <!-- Main Content -->
@@ -55,6 +66,8 @@
 
             <!-- Status Text -->
             <div class="status-container">
+                <p class="app-summary">Private nearby file sharing. Sound finds the other device, then files move directly over the local peer connection.</p>
+                <p class="setup-note">Open this page on both devices. Keep them on the same Wi-Fi or local network.</p>
                 <p class="status-text" id="statusText">Tap to find nearby devices</p>
                 <p class="status-hint" id="statusHint" style="display: none;">
                     <span class="hint-item">🔊 Keep volume up</span>
@@ -83,6 +96,26 @@
             </div>
         </div>
 
+        <!-- Recent Devices Panel -->
+        <div class="side-panel-backdrop" id="sidePanelBackdrop" style="display: none;"></div>
+        <aside class="side-panel" id="sidePanel" style="display: none;">
+            <div class="side-panel-header">
+                <div>
+                    <h2>Recent devices</h2>
+                    <p>Stored only in this browser</p>
+                </div>
+                <button class="icon-btn" id="closeSidePanelBtn" aria-label="Close recent devices">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <p class="side-panel-note">Whoosh can remember device names here, but closed WebRTC sessions cannot be reused. If the connection is no longer active, start sound discovery again. Clearing browser cache clears this list. Nothing here is sent to the internet.</p>
+            <div class="cached-devices" id="cachedDevices"></div>
+            <button class="btn btn-secondary" id="clearCachedDevicesBtn">Clear recent devices</button>
+        </aside>
+
         <!-- Error Toast -->
         <div class="error-toast" id="errorToast" style="display: none;">
             <p class="error-toast-text" id="errorToastText"></p>
@@ -90,6 +123,6 @@
     </div>
 
     <!-- Scripts -->
-    <script type="module" src="src/main.js?v=22"></script>
+    <script type="module" src="src/main.js?v=26"></script>
 </body>
 </html>
