@@ -21,6 +21,12 @@ export class UIManager {
       statusHint: document.getElementById('statusHint'),
       actionBtn: document.getElementById('actionBtn'),
       listenBtn: document.getElementById('listenBtn'),
+      devicesBtn: document.getElementById('devicesBtn'),
+      sidePanel: document.getElementById('sidePanel'),
+      sidePanelBackdrop: document.getElementById('sidePanelBackdrop'),
+      closeSidePanelBtn: document.getElementById('closeSidePanelBtn'),
+      cachedDevices: document.getElementById('cachedDevices'),
+      clearCachedDevicesBtn: document.getElementById('clearCachedDevicesBtn'),
       deviceInfo: document.getElementById('deviceInfo'),
       bottomSheet: document.getElementById('bottomSheet'),
       bottomSheetBackdrop: document.getElementById('bottomSheetBackdrop'),
@@ -38,8 +44,8 @@ export class UIManager {
     this.elements.actionBtn.addEventListener('click', () => {
       if (this.currentState === 'idle') {
         this.emit('startBroadcast');
-      } else if (this.currentState === 'listening') {
-        this.emit('cancelDiscovery');
+      } else if (this.currentState === 'listening' || this.currentState === 'connected' || this.currentState === 'transferring') {
+        this.emit('cancelSession');
       }
     });
 
@@ -47,6 +53,22 @@ export class UIManager {
       if (this.currentState === 'idle') {
         this.emit('startListening');
       }
+    });
+
+    this.elements.devicesBtn.addEventListener('click', () => {
+      this.showSidePanel();
+    });
+
+    this.elements.closeSidePanelBtn.addEventListener('click', () => {
+      this.hideSidePanel();
+    });
+
+    this.elements.sidePanelBackdrop.addEventListener('click', () => {
+      this.hideSidePanel();
+    });
+
+    this.elements.clearCachedDevicesBtn.addEventListener('click', () => {
+      this.emit('clearCachedDevices');
     });
 
     // Bottom sheet backdrop (close on click)
@@ -130,6 +152,8 @@ export class UIManager {
   showConnectedState() {
     this.elements.statusText.textContent = 'Connected';
     this.elements.radarCenter.classList.add('active');
+    this.elements.actionBtn.textContent = 'Disconnect';
+    this.elements.actionBtn.disabled = false;
     this.elements.listenBtn.style.display = 'none';
   }
 
@@ -254,7 +278,7 @@ export class UIManager {
           </p>
         </div>
         
-        <div id="filePreview" style="display: none; background: var(--surface-2); border-radius: var(--radius-md); padding: 16px; margin-bottom: 16px;">
+        <div id="filePreview" style="display: none; background: var(--surface-2); border-radius: var(--radius-md); padding: 16px; margin-bottom: 16px; text-align: left;">
           <p id="fileName" style="font-size: 15px; font-weight: 500; margin-bottom: 4px;"></p>
           <p id="fileSize" style="font-size: 13px; color: var(--text-secondary);"></p>
         </div>
@@ -272,22 +296,33 @@ export class UIManager {
     const fileSize = document.getElementById('fileSize');
     const sendBtn = document.getElementById('sendBtn');
 
-    let selectedFile = null;
+    let selectedFiles = [];
+
+    const setSelectedFiles = (files) => {
+      selectedFiles = files.filter(Boolean);
+      if (selectedFiles.length === 0) {
+        return;
+      }
+
+      const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+      fileName.textContent = selectedFiles.length === 1
+        ? selectedFiles[0].name
+        : `${selectedFiles.length} files selected`;
+      fileSize.textContent = selectedFiles.length === 1
+        ? this.formatFileSize(selectedFiles[0].size)
+        : `${this.formatFileSize(totalSize)} total`;
+      filePreview.style.display = 'block';
+      sendBtn.disabled = false;
+    };
 
     // Create hidden file input
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
+    fileInput.multiple = true;
     fileInput.style.display = 'none';
 
     fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        selectedFile = file;
-        fileName.textContent = file.name;
-        fileSize.textContent = this.formatFileSize(file.size);
-        filePreview.style.display = 'block';
-        sendBtn.disabled = false;
-      }
+      setSelectedFiles(Array.from(e.target.files));
     });
 
     dropZone.addEventListener('click', () => {
@@ -311,19 +346,12 @@ export class UIManager {
       dropZone.style.borderColor = 'var(--border)';
       dropZone.style.backgroundColor = 'transparent';
 
-      const file = e.dataTransfer.files[0];
-      if (file) {
-        selectedFile = file;
-        fileName.textContent = file.name;
-        fileSize.textContent = this.formatFileSize(file.size);
-        filePreview.style.display = 'block';
-        sendBtn.disabled = false;
-      }
+      setSelectedFiles(Array.from(e.dataTransfer.files));
     });
 
     sendBtn.addEventListener('click', () => {
-      if (selectedFile) {
-        this.emit('filePicked', selectedFile);
+      if (selectedFiles.length > 0) {
+        this.emit('filesPicked', selectedFiles);
       }
     });
   }
@@ -339,7 +367,7 @@ export class UIManager {
         </p>
         
         <div style="background: var(--surface-2); border-radius: var(--radius-md); padding: 24px; margin-bottom: 16px;">
-          <p style="font-size: 15px; font-weight: 500; margin-bottom: 8px;">${metadata.name}</p>
+          <p style="font-size: 15px; font-weight: 500; margin-bottom: 8px;">${metadata.totalFiles > 1 ? `File ${metadata.fileIndex + 1} of ${metadata.totalFiles}: ${metadata.name}` : metadata.name}</p>
           <p style="font-size: 13px; color: var(--text-secondary);">${this.formatFileSize(metadata.size)}</p>
         </div>
         
@@ -357,6 +385,11 @@ export class UIManager {
   }
 
   showSending(file, device) {
+    const title = file.totalFiles > 1 ? `${file.totalFiles} files` : file.name;
+    const detail = file.totalFiles > 1
+      ? `${this.formatFileSize(file.size)} total`
+      : this.formatFileSize(file.size);
+
     const content = `
       <div style="text-align: center;">
         <p style="font-size: 15px; color: var(--text-secondary); margin-bottom: 16px;">
@@ -367,8 +400,8 @@ export class UIManager {
         </p>
         
         <div style="background: var(--surface-2); border-radius: var(--radius-md); padding: 24px; margin-bottom: 16px;">
-          <p style="font-size: 15px; font-weight: 500; margin-bottom: 8px;">${file.name}</p>
-          <p style="font-size: 13px; color: var(--text-secondary);">${this.formatFileSize(file.size)}</p>
+          <p style="font-size: 15px; font-weight: 500; margin-bottom: 8px;">${title}</p>
+          <p style="font-size: 13px; color: var(--text-secondary);">${detail}</p>
         </div>
         
         <div style="width: 100%; height: 6px; background: var(--surface-2); border-radius: 99px; overflow: hidden; margin-bottom: 8px;">
@@ -422,13 +455,13 @@ export class UIManager {
           ${file.sent ? 'Sent successfully' : 'Received successfully'}
         </p>
         <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 24px;">
-          ${file.name} · ${this.formatFileSize(file.size)}
+          ${file.files ? `${file.files.length} files · ${this.formatFileSize(file.size)}` : `${file.name} · ${this.formatFileSize(file.size)}`}
         </p>
         
         ${file.sent ? `
           <button class="btn btn-primary" id="sendAnotherBtn">Send another</button>
         ` : `
-          <button class="btn btn-primary" id="saveBtn">Save to device</button>
+          ${file.files ? this.renderDownloadButtons(file.files) : '<button class="btn btn-primary" id="saveBtn">Save to device</button>'}
         `}
         
         <button class="btn btn-secondary" id="doneBtn" style="margin-top: 8px;">Done</button>
@@ -452,9 +485,8 @@ export class UIManager {
 
     if (sendAnotherBtn) {
       sendAnotherBtn.addEventListener('click', () => {
-        // Re-show file picker for the same device
         this.hideBottomSheet();
-        // TODO: Need to store current device reference
+        this.emit('sendAnother');
       });
     }
 
@@ -464,9 +496,20 @@ export class UIManager {
       });
     }
 
+    document.querySelectorAll('[data-download-index]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const index = Number(button.dataset.downloadIndex);
+        const receivedFile = file.files[index];
+        if (receivedFile) {
+          this.downloadFile(receivedFile.blob, receivedFile.name);
+        }
+      });
+    });
+
     if (doneBtn) {
       doneBtn.addEventListener('click', () => {
         this.hideBottomSheet();
+        this.emit('done');
       });
     }
   }
@@ -480,6 +523,39 @@ export class UIManager {
   hideBottomSheet() {
     this.elements.bottomSheet.style.display = 'none';
     this.elements.bottomSheetBackdrop.style.display = 'none';
+  }
+
+  showSidePanel() {
+    this.elements.sidePanel.style.display = 'block';
+    this.elements.sidePanelBackdrop.style.display = 'block';
+  }
+
+  hideSidePanel() {
+    this.elements.sidePanel.style.display = 'none';
+    this.elements.sidePanelBackdrop.style.display = 'none';
+  }
+
+  setCachedDevices(devices, activeDeviceId = null) {
+    if (!devices.length) {
+      this.elements.cachedDevices.innerHTML = '<div class="empty-devices">Devices you connect with will appear here.</div>';
+      return;
+    }
+
+    this.elements.cachedDevices.innerHTML = devices.map((device) => `
+      <button class="cached-device" data-device-id="${this.escapeHtml(device.id)}">
+        <span class="cached-device-main">
+          <span class="cached-device-name">${this.escapeHtml(this.getDeviceIcon(device.type) + ' ' + device.name)}</span>
+          <span class="cached-device-meta">${this.escapeHtml(this.formatLastSeen(device.lastSeen))}</span>
+        </span>
+        <span class="cached-device-status">${device.id === activeDeviceId ? 'Active' : 'Remembered'}</span>
+      </button>
+    `).join('');
+
+    this.elements.cachedDevices.querySelectorAll('[data-device-id]').forEach((button) => {
+      button.addEventListener('click', () => {
+        this.emit('cachedDeviceSelected', button.dataset.deviceId);
+      });
+    });
   }
 
   // Error handling
@@ -508,6 +584,36 @@ export class UIManager {
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  renderDownloadButtons(files) {
+    return files.map((file, index) => `
+      <button class="btn btn-secondary" data-download-index="${index}" style="margin-bottom: 8px;">
+        Save ${this.escapeHtml(file.name)}
+      </button>
+    `).join('');
+  }
+
+  formatLastSeen(timestamp) {
+    if (!timestamp) {
+      return 'Saved locally';
+    }
+
+    const elapsed = Date.now() - timestamp;
+    if (elapsed < 60000) return 'Just now';
+    if (elapsed < 3600000) return `${Math.floor(elapsed / 60000)} min ago`;
+    if (elapsed < 86400000) return `${Math.floor(elapsed / 3600000)} hr ago`;
+    return new Date(timestamp).toLocaleDateString();
+  }
+
+  escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
+    })[char]);
   }
 
   downloadFile(blob, filename) {

@@ -109,7 +109,7 @@ export class DiscoveryManager {
       // Use audible fastest for the MVP path; once the flow is stable we can add
       // an ultrasonic preference with audible fallback.
       this.protocol = this.ggwave.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FASTEST;
-      this.reliableProtocol = this.ggwave.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_NORMAL;
+      this.reliableProtocol = this.ggwave.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FAST;
 
       console.log("[Discovery] ggwave WASM loaded and initialized successfully");
       console.log("[Discovery] Sample rate:", sampleRate);
