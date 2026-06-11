@@ -18,13 +18,16 @@ class WhooshApp {
     this.currentPeer = null;
     this.role = null; // sender, receiver
     this.isAcceptingOffer = false;
+    this.discoveryRunId = 0;
     this.discoveredDeviceIds = new Set();
     this.presenceLoopActive = false;
     this.discoveryTimeout = null;
+    this.connectionTimeout = null;
     this.outgoingOffer = null;
     this.DISCOVERY_TIMEOUT_MS = 40000;
-    this.OFFER_RETRY_DELAY_MS = 9000;
-    this.OFFER_RETRY_JITTER_MS = 2500;
+    this.CONNECTION_TIMEOUT_MS = 40000;
+    this.OFFER_RETRY_DELAY_MS = 8000;
+    this.OFFER_RETRY_JITTER_MS = 2000;
   }
 
   async init() {
@@ -94,6 +97,7 @@ class WhooshApp {
       this.state = 'connected';
       this.stopOfferBroadcast();
       this.clearDiscoveryTimeout();
+      this.clearConnectionTimeout();
       this.ui.setState('connected');
       if (this.role === 'sender' && this.currentPeer) {
         this.ui.showFilePicker(this.currentPeer);
@@ -145,6 +149,7 @@ class WhooshApp {
 
     try {
       await this.startAudioDiscovery();
+      const runId = ++this.discoveryRunId;
 
       this.role = 'sender';
       this.state = 'listening';
@@ -156,12 +161,13 @@ class WhooshApp {
       this.outgoingOffer = this.connection.createCompactSignal('offer', this.localDevice);
 
       this.startDiscoveryTimeout();
-      this.startOfferBroadcastLoop();
+      this.startOfferBroadcastLoop(runId);
 
     } catch (error) {
       console.error('[Whoosh] Failed to start broadcast:', error);
       this.ui.showError(this.getHumanReadableError(error));
       this.stopOfferBroadcast();
+      this.discoveryRunId++;
       this.clearDiscoveryTimeout();
       this.discovery.cleanup();
       this.releaseWakeLock();
@@ -173,6 +179,7 @@ class WhooshApp {
 
     try {
       await this.startAudioDiscovery();
+      ++this.discoveryRunId;
 
       this.role = 'receiver';
       this.state = 'listening';
@@ -200,7 +207,9 @@ class WhooshApp {
     console.log('[Whoosh] Stopping discovery...');
 
     this.stopOfferBroadcast();
+    this.discoveryRunId++;
     this.clearDiscoveryTimeout();
+    this.clearConnectionTimeout();
     this.discovery.cleanup();
     this.releaseWakeLock();
 
@@ -224,24 +233,24 @@ class WhooshApp {
     }
   }
 
-  startOfferBroadcastLoop() {
+  startOfferBroadcastLoop(runId) {
     if (this.presenceLoopActive) {
       return;
     }
 
     this.presenceLoopActive = true;
-    this.runOfferBroadcastLoop();
+    this.runOfferBroadcastLoop(runId);
   }
 
   stopOfferBroadcast() {
     this.presenceLoopActive = false;
   }
 
-  async runOfferBroadcastLoop() {
-    while (this.presenceLoopActive && this.state === 'listening') {
+  async runOfferBroadcastLoop(runId) {
+    while (this.presenceLoopActive && this.state === 'listening' && runId === this.discoveryRunId) {
       await this.broadcastOffer();
 
-      if (!this.presenceLoopActive || this.state !== 'listening') {
+      if (!this.presenceLoopActive || this.state !== 'listening' || runId !== this.discoveryRunId) {
         break;
       }
 
@@ -266,6 +275,26 @@ class WhooshApp {
     if (this.discoveryTimeout) {
       clearTimeout(this.discoveryTimeout);
       this.discoveryTimeout = null;
+    }
+  }
+
+  startConnectionTimeout() {
+    this.clearConnectionTimeout();
+
+    this.connectionTimeout = setTimeout(() => {
+      if (this.state === 'connected' || this.state === 'idle') {
+        return;
+      }
+
+      this.ui.showError("Couldn't connect. Try again with both devices close together.");
+      this.stopDiscovery();
+    }, this.CONNECTION_TIMEOUT_MS);
+  }
+
+  clearConnectionTimeout() {
+    if (this.connectionTimeout) {
+      clearTimeout(this.connectionTimeout);
+      this.connectionTimeout = null;
     }
   }
 
@@ -364,6 +393,7 @@ class WhooshApp {
 
   async acceptOffer(message) {
     try {
+      const runId = this.discoveryRunId;
       this.isAcceptingOffer = true;
       this.currentPeer = message.from || this.currentPeer;
       this.ui.clearDevices();
@@ -376,9 +406,14 @@ class WhooshApp {
       const answer = await this.connection.handleOffer(offer);
       const compactAnswer = this.connection.createCompactSignal('answer', this.localDevice);
 
-      await this.sendAnswerRetries(compactAnswer);
+      await this.sendAnswerRetries(compactAnswer, runId);
+
+      if (runId !== this.discoveryRunId || !this.isAcceptingOffer) {
+        return;
+      }
 
       this.ui.setStatus('Connecting...');
+      this.startConnectionTimeout();
     } catch (error) {
       console.error('[Whoosh] Failed to accept offer:', error);
       this.isAcceptingOffer = false;
@@ -386,14 +421,18 @@ class WhooshApp {
     }
   }
 
-  async sendAnswerRetries(compactAnswer) {
-    const attempts = 3;
+  async sendAnswerRetries(compactAnswer, runId) {
+    const attempts = 4;
 
     for (let attempt = 0; attempt < attempts; attempt++) {
+      if (runId !== this.discoveryRunId || !this.isAcceptingOffer || this.state !== 'listening') {
+        return;
+      }
+
       await this.discovery.sendCompactSignal(compactAnswer);
 
       if (attempt < attempts - 1) {
-        await this.sleep(1800);
+        await this.sleep(2500);
       }
     }
   }
@@ -410,6 +449,7 @@ class WhooshApp {
         this.currentPeer = compact.device || this.currentPeer;
         this.stopOfferBroadcast();
         this.clearDiscoveryTimeout();
+        this.startConnectionTimeout();
         await this.connection.handleAnswer(compact.description);
       } catch (error) {
         console.error('[Whoosh] Failed to handle compact answer:', error);
@@ -428,6 +468,7 @@ class WhooshApp {
       this.currentPeer = message.from || this.currentPeer;
       this.stopOfferBroadcast();
       this.clearDiscoveryTimeout();
+      this.startConnectionTimeout();
       await this.connection.handleAnswer(message.answer);
     } catch (error) {
       console.error('[Whoosh] Failed to handle answer:', error);
@@ -466,8 +507,10 @@ class WhooshApp {
     this.currentPeer = null;
     this.role = null;
     this.isAcceptingOffer = false;
+    this.discoveryRunId++;
     this.stopOfferBroadcast();
     this.clearDiscoveryTimeout();
+    this.clearConnectionTimeout();
     this.ui.setState('idle');
     this.ui.clearDevices();
     this.releaseWakeLock();
