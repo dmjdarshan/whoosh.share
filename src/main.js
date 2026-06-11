@@ -2,8 +2,8 @@
 // Orchestrates the entire application flow
 
 import { UIManager } from './ui.js?v=2';
-import { DiscoveryManager } from './discovery.js?v=6';
-import { ConnectionManager } from './connection.js?v=5';
+import { DiscoveryManager } from './discovery.js?v=7';
+import { ConnectionManager } from './connection.js?v=6';
 import { TransferManager } from './transfer.js?v=2';
 
 class WhooshApp {
@@ -433,6 +433,7 @@ class WhooshApp {
       const answer = await this.connection.handleOffer(offer);
       const compactAnswer = this.connection.createCompactSignal('answer', this.localDevice);
 
+      await this.sleep(800);
       await this.sendAnswerRetries(compactAnswer, runId);
 
       if (runId !== this.discoveryRunId || !this.isAcceptingOffer) {
@@ -456,7 +457,7 @@ class WhooshApp {
         return;
       }
 
-      await this.discovery.sendCompactSignal(compactAnswer);
+      await this.discovery.sendCompactSignal(compactAnswer, { reliable: true });
 
       if (runId !== this.discoveryRunId || !this.isAcceptingOffer) {
         return;

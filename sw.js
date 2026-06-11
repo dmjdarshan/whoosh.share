@@ -51,7 +51,6 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   // If caching is disabled, always fetch from network
   if (CACHING_DISABLED) {
-    event.respondWith(fetch(event.request));
     return;
   }
   
@@ -105,5 +104,4 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
-
 

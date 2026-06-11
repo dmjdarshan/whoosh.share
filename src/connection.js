@@ -111,6 +111,12 @@ export class ConnectionManager {
     const deviceType = (device && device.type ? device.type[0] : 'l').toLowerCase();
     let deviceName = encodeURIComponent((device && device.name) || 'Nearby device').slice(0, 18);
 
+    if (kind === 'answer') {
+      const signal = this.buildCompactSignal(mode, parts);
+      console.log('[Connection] Compact signal length:', signal.length);
+      return signal;
+    }
+
     let signal = this.buildCompactSignal(mode, parts, deviceType, deviceName);
     if (signal.length > 135) {
       deviceName = '';

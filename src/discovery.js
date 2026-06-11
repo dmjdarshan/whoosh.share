@@ -109,6 +109,7 @@ export class DiscoveryManager {
       // Use audible fastest for the MVP path; once the flow is stable we can add
       // an ultrasonic preference with audible fallback.
       this.protocol = this.ggwave.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_FASTEST;
+      this.reliableProtocol = this.ggwave.ProtocolId.GGWAVE_PROTOCOL_AUDIBLE_NORMAL;
 
       console.log("[Discovery] ggwave WASM loaded and initialized successfully");
       console.log("[Discovery] Sample rate:", sampleRate);
@@ -274,9 +275,9 @@ export class DiscoveryManager {
     await this.transmitLarge(message);
   }
 
-  async sendCompactSignal(signal) {
+  async sendCompactSignal(signal, options = {}) {
     console.log("[Discovery] Sending compact signal");
-    await this.transmitText(signal);
+    await this.transmitText(signal, options);
   }
 
   // Send WebRTC answer via audio
@@ -320,7 +321,7 @@ export class DiscoveryManager {
     }
   }
 
-  async transmitText(text) {
+  async transmitText(text, options = {}) {
     if (!this.ggwave || this.ggwaveInstance === null || !this.audioContext) {
       throw new Error("ggwave not initialized");
     }
@@ -330,10 +331,11 @@ export class DiscoveryManager {
       this.isTransmitting = true;
 
       const volume = 50; // Volume level (0-100)
+      const protocol = options.reliable ? this.reliableProtocol : this.protocol;
       const audioSamples = this.ggwave.encode(
         this.ggwaveInstance,
         text,
-        this.protocol,
+        protocol,
         volume,
       );
 
