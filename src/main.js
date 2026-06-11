@@ -26,8 +26,8 @@ class WhooshApp {
     this.outgoingOffer = null;
     this.DISCOVERY_TIMEOUT_MS = 40000;
     this.CONNECTION_TIMEOUT_MS = 40000;
-    this.OFFER_RETRY_DELAY_MS = 8000;
-    this.OFFER_RETRY_JITTER_MS = 2000;
+    this.OFFER_RETRY_DELAY_MS = 4000;
+    this.OFFER_RETRY_JITTER_MS = 1000;
   }
 
   async init() {
@@ -425,7 +425,7 @@ class WhooshApp {
     const attempts = 4;
 
     for (let attempt = 0; attempt < attempts; attempt++) {
-      if (runId !== this.discoveryRunId || !this.isAcceptingOffer || this.state !== 'listening') {
+      if (runId !== this.discoveryRunId || !this.isAcceptingOffer) {
         return;
       }
 
