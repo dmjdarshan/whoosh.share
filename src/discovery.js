@@ -11,10 +11,12 @@ export class DiscoveryManager {
     this.micStream = null;
     this.audioWorkletNode = null;
     this.audioSource = null;
+    this.currentAudioSource = null;
     this.protocol = null;
     this.chunkBuffers = new Map();
     this.CHUNK_PAYLOAD_SIZE = 90;
     this.isTransmitting = false;
+    this.lastSoundDetectedAt = 0;
   }
 
   // Event emitter pattern
@@ -184,6 +186,8 @@ export class DiscoveryManager {
     }
 
     try {
+      this.detectSoundActivity(samples);
+
       const pcmSamples = this.floatToInt8(samples);
       const decodedBytes = this.ggwave.decode(this.ggwaveInstance, pcmSamples);
 
@@ -199,6 +203,22 @@ export class DiscoveryManager {
       if (!(error instanceof SyntaxError)) {
         console.warn("[Discovery] Decode error:", error);
       }
+    }
+  }
+
+  detectSoundActivity(samples) {
+    let sum = 0;
+
+    for (let i = 0; i < samples.length; i++) {
+      sum += samples[i] * samples[i];
+    }
+
+    const rms = Math.sqrt(sum / samples.length);
+    const now = Date.now();
+
+    if (rms > 0.025 && now - this.lastSoundDetectedAt > 1000) {
+      this.lastSoundDetectedAt = now;
+      this.emit("soundDetected", { rms });
     }
   }
 
@@ -415,16 +435,35 @@ export class DiscoveryManager {
 
         // Create buffer source
         const source = this.audioContext.createBufferSource();
+        this.currentAudioSource = source;
         source.buffer = buffer;
         source.connect(this.audioContext.destination);
 
         // Play
-        source.onended = () => resolve();
+        source.onended = () => {
+          if (this.currentAudioSource === source) {
+            this.currentAudioSource = null;
+          }
+          resolve();
+        };
         source.start(0);
       } catch (error) {
         reject(error);
       }
     });
+  }
+
+  stopPlayback() {
+    if (this.currentAudioSource) {
+      try {
+        this.currentAudioSource.stop();
+      } catch (error) {
+        // Source may already have ended.
+      }
+      this.currentAudioSource = null;
+    }
+
+    this.isTransmitting = false;
   }
 
   floatToInt8(samples) {
@@ -442,6 +481,7 @@ export class DiscoveryManager {
   cleanup() {
     console.log("[Discovery] Cleaning up...");
 
+    this.stopPlayback();
     this.stopListening();
     this.chunkBuffers.clear();
 

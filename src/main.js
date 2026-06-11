@@ -2,8 +2,8 @@
 // Orchestrates the entire application flow
 
 import { UIManager } from './ui.js?v=2';
-import { DiscoveryManager } from './discovery.js?v=4';
-import { ConnectionManager } from './connection.js?v=3';
+import { DiscoveryManager } from './discovery.js?v=5';
+import { ConnectionManager } from './connection.js?v=4';
 import { TransferManager } from './transfer.js?v=2';
 
 class WhooshApp {
@@ -24,8 +24,10 @@ class WhooshApp {
     this.discoveryTimeout = null;
     this.connectionTimeout = null;
     this.outgoingOffer = null;
+    this.offerPauseUntil = 0;
     this.DISCOVERY_TIMEOUT_MS = 40000;
     this.CONNECTION_TIMEOUT_MS = 40000;
+    this.SOUND_ACTIVITY_PAUSE_MS = 7000;
     this.OFFER_RETRY_DELAY_MS = 4000;
     this.OFFER_RETRY_JITTER_MS = 1000;
   }
@@ -83,6 +85,10 @@ class WhooshApp {
     this.discovery.on('answerReceived', (message) => {
       console.log('[Whoosh] Answer received');
       this.handleAnswerReceived(message);
+    });
+
+    this.discovery.on('soundDetected', ({ rms }) => {
+      this.handleSoundDetected(rms);
     });
 
     this.discovery.on('error', (error) => {
@@ -211,12 +217,15 @@ class WhooshApp {
     this.clearDiscoveryTimeout();
     this.clearConnectionTimeout();
     this.discovery.cleanup();
+    this.connection.close();
     this.releaseWakeLock();
 
     this.state = 'idle';
     this.role = null;
+    this.currentPeer = null;
     this.isAcceptingOffer = false;
     this.outgoingOffer = null;
+    this.offerPauseUntil = 0;
     this.ui.setState('idle');
     this.ui.clearDevices();
   }
@@ -248,6 +257,12 @@ class WhooshApp {
 
   async runOfferBroadcastLoop(runId) {
     while (this.presenceLoopActive && this.state === 'listening' && runId === this.discoveryRunId) {
+      const pauseMs = this.offerPauseUntil - Date.now();
+      if (pauseMs > 0) {
+        await this.sleep(pauseMs);
+        continue;
+      }
+
       await this.broadcastOffer();
 
       if (!this.presenceLoopActive || this.state !== 'listening' || runId !== this.discoveryRunId) {
@@ -431,6 +446,10 @@ class WhooshApp {
 
       await this.discovery.sendCompactSignal(compactAnswer);
 
+      if (runId !== this.discoveryRunId || !this.isAcceptingOffer) {
+        return;
+      }
+
       if (attempt < attempts - 1) {
         await this.sleep(2500);
       }
@@ -448,6 +467,7 @@ class WhooshApp {
         const compact = this.connection.expandCompactSignal(message.compact);
         this.currentPeer = compact.device || this.currentPeer;
         this.stopOfferBroadcast();
+        this.offerPauseUntil = 0;
         this.clearDiscoveryTimeout();
         this.startConnectionTimeout();
         await this.connection.handleAnswer(compact.description);
@@ -467,6 +487,7 @@ class WhooshApp {
     try {
       this.currentPeer = message.from || this.currentPeer;
       this.stopOfferBroadcast();
+      this.offerPauseUntil = 0;
       this.clearDiscoveryTimeout();
       this.startConnectionTimeout();
       await this.connection.handleAnswer(message.answer);
@@ -509,6 +530,7 @@ class WhooshApp {
     this.isAcceptingOffer = false;
     this.discoveryRunId++;
     this.stopOfferBroadcast();
+    this.offerPauseUntil = 0;
     this.clearDiscoveryTimeout();
     this.clearConnectionTimeout();
     this.ui.setState('idle');
@@ -637,6 +659,20 @@ class WhooshApp {
 
   getOfferRetryDelay() {
     return this.OFFER_RETRY_DELAY_MS + Math.floor(Math.random() * this.OFFER_RETRY_JITTER_MS);
+  }
+
+  handleSoundDetected(rms) {
+    if (this.role !== 'sender' || this.state !== 'listening' || !this.presenceLoopActive) {
+      return;
+    }
+
+    this.offerPauseUntil = Math.max(
+      this.offerPauseUntil,
+      Date.now() + this.SOUND_ACTIVITY_PAUSE_MS
+    );
+
+    this.ui.setStatus('Heard a reply. Listening...');
+    console.log('[Whoosh] Sound detected while sending; pausing offers', rms);
   }
 
   getHumanReadableError(error) {
