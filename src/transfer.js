@@ -7,7 +7,9 @@ export class TransferManager {
     this.currentTransfer = null;
     this.receivingFile = null;
     this.receivingBatch = null;
-    this.CHUNK_SIZE = 512 * 1024; // 512KB chunks
+    // Keep chunks below the advertised WebRTC max-message-size (262144 bytes).
+    // Smaller chunks are more reliable across mobile browsers.
+    this.CHUNK_SIZE = 64 * 1024;
     this.cancelled = false;
   }
 
@@ -96,22 +98,19 @@ export class TransferManager {
       };
       dataChannel.send(JSON.stringify(metadata));
 
-      // Read file as array buffer
-      const buffer = await file.arrayBuffer();
-
       // Send file in chunks
       let offset = 0;
-      const totalChunks = Math.ceil(buffer.byteLength / this.CHUNK_SIZE);
+      const totalChunks = Math.ceil(file.size / this.CHUNK_SIZE);
       let chunkIndex = 0;
 
-      while (offset < buffer.byteLength && !this.cancelled) {
+      while (offset < file.size && !this.cancelled) {
         // Check buffer and wait if needed (backpressure handling)
-        if (dataChannel.bufferedAmount > this.CHUNK_SIZE * 4) {
+        if (dataChannel.bufferedAmount > this.CHUNK_SIZE * 32) {
           await this.waitForBufferDrain(dataChannel);
         }
 
         // Get chunk
-        const chunk = buffer.slice(offset, offset + this.CHUNK_SIZE);
+        const chunk = await file.slice(offset, offset + this.CHUNK_SIZE).arrayBuffer();
         
         // Send chunk
         dataChannel.send(chunk);
@@ -125,7 +124,7 @@ export class TransferManager {
         this.emitProgress();
 
         // Small delay to prevent overwhelming the channel
-        if (chunkIndex % 10 === 0) {
+        if (chunkIndex % 32 === 0) {
           await this.sleep(10);
         }
       }
@@ -322,7 +321,7 @@ export class TransferManager {
   waitForBufferDrain(dataChannel) {
     return new Promise((resolve) => {
       const checkBuffer = () => {
-        if (dataChannel.bufferedAmount < this.CHUNK_SIZE * 2) {
+        if (dataChannel.bufferedAmount < this.CHUNK_SIZE * 16) {
           resolve();
         } else {
           setTimeout(checkBuffer, 50);
