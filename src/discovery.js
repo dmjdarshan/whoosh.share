@@ -250,6 +250,11 @@ export class DiscoveryManager {
     await this.transmitLarge(message);
   }
 
+  async sendCompactSignal(signal) {
+    console.log("[Discovery] Sending compact signal");
+    await this.transmitText(signal);
+  }
+
   // Send WebRTC answer via audio
   async sendAnswer(answer, targetDeviceId, fromDevice) {
     console.log("[Discovery] Sending answer");
@@ -323,6 +328,16 @@ export class DiscoveryManager {
   handleDecodedText(text) {
     if (text.startsWith("C|")) {
       this.handleChunk(text);
+      return;
+    }
+
+    if (text.startsWith("O|")) {
+      this.emit("offerReceived", { compact: text });
+      return;
+    }
+
+    if (text.startsWith("A|")) {
+      this.emit("answerReceived", { compact: text });
       return;
     }
 
