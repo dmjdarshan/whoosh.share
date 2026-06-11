@@ -12,6 +12,9 @@ export class DiscoveryManager {
     this.audioWorkletNode = null;
     this.audioSource = null;
     this.protocol = null;
+    this.chunkBuffers = new Map();
+    this.CHUNK_PAYLOAD_SIZE = 90;
+    this.isTransmitting = false;
   }
 
   // Event emitter pattern
@@ -176,7 +179,7 @@ export class DiscoveryManager {
 
   // Process incoming audio data
   processAudioInput(samples) {
-    if (!this.ggwave || this.ggwaveInstance === null) {
+    if (!this.ggwave || this.ggwaveInstance === null || this.isTransmitting) {
       return;
     }
 
@@ -188,16 +191,7 @@ export class DiscoveryManager {
         const decoded = new TextDecoder().decode(decodedBytes);
         console.log("[Discovery] Decoded data:", decoded.length, "chars");
 
-        const data = JSON.parse(decoded);
-
-        // Handle different message types
-        if (data.type === "device") {
-          this.emit("deviceFound", data.device);
-        } else if (data.type === "offer") {
-          this.emit("offerReceived", data);
-        } else if (data.type === "answer") {
-          this.emit("answerReceived", data);
-        }
+        this.handleDecodedText(decoded);
       }
     } catch (error) {
       // Ignore decoding errors (ambient noise, etc.)
@@ -253,7 +247,7 @@ export class DiscoveryManager {
       from: fromDevice,
     };
 
-    await this.transmit(message);
+    await this.transmitLarge(message);
   }
 
   // Send WebRTC answer via audio
@@ -267,25 +261,49 @@ export class DiscoveryManager {
       from: fromDevice,
     };
 
-    await this.transmit(message);
+    await this.transmitLarge(message);
   }
 
   // Transmit data via audio
   async transmit(data) {
+    await this.transmitText(JSON.stringify(data));
+  }
+
+  async transmitLarge(data) {
+    const json = JSON.stringify(data);
+
+    if (json.length <= 120) {
+      await this.transmitText(json);
+      return;
+    }
+
+    const messageId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    const total = Math.ceil(json.length / this.CHUNK_PAYLOAD_SIZE);
+
+    console.log("[Discovery] Transmitting chunked payload:", json.length, "bytes in", total, "chunks");
+
+    for (let index = 0; index < total; index++) {
+      const chunk = json.slice(
+        index * this.CHUNK_PAYLOAD_SIZE,
+        (index + 1) * this.CHUNK_PAYLOAD_SIZE
+      );
+      await this.transmitText(`C|${messageId}|${index}|${total}|${chunk}`);
+    }
+  }
+
+  async transmitText(text) {
     if (!this.ggwave || this.ggwaveInstance === null || !this.audioContext) {
       throw new Error("ggwave not initialized");
     }
 
     try {
-      // Serialize data to JSON string (ggwave expects a string, not bytes)
-      const json = JSON.stringify(data);
-
-      console.log("[Discovery] Transmitting:", json.length, "bytes");
+      console.log("[Discovery] Transmitting:", text.length, "bytes");
+      this.isTransmitting = true;
 
       const volume = 50; // Volume level (0-100)
       const audioSamples = this.ggwave.encode(
         this.ggwaveInstance,
-        json, // Pass string directly, not Uint8Array
+        text,
         this.protocol,
         volume,
       );
@@ -297,6 +315,69 @@ export class DiscoveryManager {
     } catch (error) {
       console.error("[Discovery] Transmission failed:", error);
       throw error;
+    } finally {
+      this.isTransmitting = false;
+    }
+  }
+
+  handleDecodedText(text) {
+    if (text.startsWith("C|")) {
+      this.handleChunk(text);
+      return;
+    }
+
+    const data = JSON.parse(text);
+
+    if (data.type === "device") {
+      this.emit("deviceFound", data.device);
+    } else if (data.type === "offer") {
+      this.emit("offerReceived", data);
+    } else if (data.type === "answer") {
+      this.emit("answerReceived", data);
+    }
+  }
+
+  handleChunk(text) {
+    const first = text.indexOf("|");
+    const second = text.indexOf("|", first + 1);
+    const third = text.indexOf("|", second + 1);
+    const fourth = text.indexOf("|", third + 1);
+
+    if (first === -1 || second === -1 || third === -1 || fourth === -1) {
+      return;
+    }
+
+    const id = text.slice(first + 1, second);
+    const index = Number(text.slice(second + 1, third));
+    const total = Number(text.slice(third + 1, fourth));
+    const payload = text.slice(fourth + 1);
+
+    if (!Number.isInteger(index) || !Number.isInteger(total) || total <= 0) {
+      return;
+    }
+
+    let buffer = this.chunkBuffers.get(id);
+    if (!buffer) {
+      buffer = {
+        chunks: new Array(total),
+        received: 0,
+        updatedAt: Date.now()
+      };
+      this.chunkBuffers.set(id, buffer);
+    }
+
+    if (!buffer.chunks[index]) {
+      buffer.chunks[index] = payload;
+      buffer.received++;
+      buffer.updatedAt = Date.now();
+      console.log("[Discovery] Received chunk", index + 1, "of", total);
+    }
+
+    if (buffer.received === total) {
+      this.chunkBuffers.delete(id);
+      const assembled = buffer.chunks.join("");
+      console.log("[Discovery] Reassembled chunked payload:", assembled.length, "bytes");
+      this.handleDecodedText(assembled);
     }
   }
 
@@ -347,6 +428,7 @@ export class DiscoveryManager {
     console.log("[Discovery] Cleaning up...");
 
     this.stopListening();
+    this.chunkBuffers.clear();
 
     if (this.audioContext) {
       this.audioContext.close();
