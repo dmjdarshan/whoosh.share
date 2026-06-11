@@ -2,8 +2,8 @@
 // Orchestrates the entire application flow
 
 import { UIManager } from './ui.js?v=2';
-import { DiscoveryManager } from './discovery.js?v=3';
-import { ConnectionManager } from './connection.js?v=2';
+import { DiscoveryManager } from './discovery.js?v=4';
+import { ConnectionManager } from './connection.js?v=3';
 import { TransferManager } from './transfer.js?v=2';
 
 class WhooshApp {
@@ -151,7 +151,8 @@ class WhooshApp {
       this.ui.setState('listening');
       this.ui.setStatus('Sending sound to nearby devices...');
 
-      this.outgoingOffer = await this.connection.createOffer();
+      await this.connection.createOffer();
+      this.outgoingOffer = this.connection.createCompactSignal('offer', this.localDevice);
 
       this.startDiscoveryTimeout();
       this.startOfferBroadcastLoop();
@@ -215,7 +216,7 @@ class WhooshApp {
     }
 
     try {
-      await this.discovery.sendOffer(this.outgoingOffer, null, this.localDevice);
+      await this.discovery.sendCompactSignal(this.outgoingOffer);
     } catch (error) {
       console.error('[Whoosh] Failed to broadcast offer:', error);
     }
@@ -295,6 +296,11 @@ class WhooshApp {
   }
 
   async handleOfferReceived(message) {
+    if (message.compact) {
+      await this.handleCompactOfferReceived(message.compact);
+      return;
+    }
+
     if ((message.targetId && message.targetId !== this.localDevice.id) ||
         (message.from && message.from.id === this.localDevice.id)) {
       console.log('[Whoosh] Ignoring own offer');
@@ -322,17 +328,45 @@ class WhooshApp {
     }
   }
 
+  async handleCompactOfferReceived(signal) {
+    if (this.role !== 'receiver') {
+      console.log('[Whoosh] Ignoring compact offer while not receiving');
+      return;
+    }
+
+    try {
+      const compact = this.connection.expandCompactSignal(signal);
+      const peer = compact.device;
+
+      this.currentPeer = peer;
+      this.discoveredDeviceIds.add(peer.id);
+      this.clearDiscoveryTimeout();
+      this.ui.addDevice({
+        ...peer,
+        pendingOffer: {
+          compact: signal,
+          offer: compact.description,
+          from: peer
+        }
+      });
+      this.ui.setStatus('Device found. Tap it to connect.');
+    } catch (error) {
+      console.error('[Whoosh] Failed to handle compact offer:', error);
+      this.ui.showError(this.getHumanReadableError(error));
+    }
+  }
+
   async acceptOffer(message) {
     try {
       this.currentPeer = message.from || this.currentPeer;
 
-      const answer = await this.connection.handleOffer(message.offer);
+      const offer = message.compact
+        ? this.connection.expandCompactSignal(message.compact).description
+        : message.offer;
+      const answer = await this.connection.handleOffer(offer);
+      const compactAnswer = this.connection.createCompactSignal('answer', this.localDevice);
 
-      await this.discovery.sendAnswer(
-        answer,
-        message.from ? message.from.id : null,
-        this.localDevice
-      );
+      await this.discovery.sendCompactSignal(compactAnswer);
 
       this.ui.setStatus('Connecting...');
     } catch (error) {
@@ -342,6 +376,25 @@ class WhooshApp {
   }
 
   async handleAnswerReceived(message) {
+    if (message.compact) {
+      if (this.role !== 'sender') {
+        console.log('[Whoosh] Ignoring compact answer while not sending');
+        return;
+      }
+
+      try {
+        const compact = this.connection.expandCompactSignal(message.compact);
+        this.currentPeer = compact.device || this.currentPeer;
+        this.stopOfferBroadcast();
+        this.clearDiscoveryTimeout();
+        await this.connection.handleAnswer(compact.description);
+      } catch (error) {
+        console.error('[Whoosh] Failed to handle compact answer:', error);
+        this.ui.showError(this.getHumanReadableError(error));
+      }
+      return;
+    }
+
     if ((message.targetId && message.targetId !== this.localDevice.id) ||
         (message.from && message.from.id === this.localDevice.id)) {
       console.log('[Whoosh] Ignoring answer not meant for this device');
