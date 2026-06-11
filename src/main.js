@@ -4,7 +4,7 @@
 import { UIManager } from './ui.js?v=4';
 import { DiscoveryManager } from './discovery.js?v=8';
 import { ConnectionManager } from './connection.js?v=6';
-import { TransferManager } from './transfer.js?v=3';
+import { TransferManager } from './transfer.js?v=4';
 
 class WhooshApp {
   constructor() {
@@ -838,6 +838,10 @@ class WhooshApp {
 
     if (errorMessage.includes('ICE') || errorMessage.includes('connection')) {
       return "Couldn't connect — make sure both devices are on the same WiFi and volume is up.";
+    }
+
+    if (errorMessage.includes('max-message-size') || errorMessage.includes('larger than')) {
+      return 'That file chunk was too large for this browser. Please reload and try again.';
     }
 
     if (errorMessage.includes('audio') || errorMessage.includes('AudioContext')) {
