@@ -35,6 +35,10 @@ See [Architecture.md](Architecture.md) for detailed technical documentation.
 
 ## 🚀 Quick Start
 
+### Live Demo
+
+https://dmjdarshan.github.io/whoosh.share/
+
 ### Prerequisites
 
 - A modern web browser (Chrome, Firefox, or Safari 16+)
@@ -205,16 +209,6 @@ chrome://webrtc-internals
 
 ---
 
-## 🎨 Design Philosophy
-
-Whoosh should feel like it belongs on your phone next to AirDrop. The UI is inspired by iOS design language:
-
-- **Clean & minimal** — No clutter, no settings panels
-- **Generous spacing** — 8px grid system
-- **Smooth animations** — Spring curves, no hard cuts
-- **Human language** — No technical jargon in UI
-- **Calm colors** — iOS system colors, soft shadows
-
 See [Architecture.md](Architecture.md) for detailed design specifications.
 
 ---
@@ -227,23 +221,6 @@ Whoosh uses vanilla JavaScript with ES modules. No npm, no webpack, no build pro
 
 Just edit the files and refresh the browser.
 
-### Adding Features
-
-The codebase is modular:
-
-- **UI changes** → `src/ui.js` + `styles.css`
-- **Discovery logic** → `src/discovery.js`
-- **Connection logic** → `src/connection.js`
-- **Transfer logic** → `src/transfer.js`
-- **Orchestration** → `src/main.js`
-
-### Code Style
-
-- Use ES6+ features (async/await, arrow functions, etc.)
-- Event-driven architecture (emit/on pattern)
-- Human-readable error messages
-- Extensive console logging for debugging
-
 ---
 
 ## 🚧 Known Limitations
@@ -251,7 +228,6 @@ The codebase is modular:
 ### Current Implementation
 
 - **ggwave API dependent** — Replacing the bundled ggwave build may require adapting `src/discovery.js`
-- **Single file only** — No multi-file queue (MVP limitation)
 - **No resume** — Transfer must complete in one session
 - **No encryption** — Files are sent in plaintext over local network (WebRTC is encrypted by default with DTLS)
 
@@ -290,9 +266,7 @@ The codebase is modular:
 Contributions welcome! Areas that need work:
 
 1. **ggwave integration** — Test and harden audio discovery across device/browser pairs
-2. **iOS testing** — Validate audio discovery on real iOS devices
 3. **Error handling** — More robust error recovery
-4. **Multi-file support** — Queue multiple files
 5. **Transfer resume** — Handle connection drops gracefully
 6. **Dark mode** — Add dark color scheme
 7. **Accessibility** — ARIA labels, keyboard navigation
@@ -315,9 +289,9 @@ MIT License — see [LICENSE](LICENSE) file.
 
 ## 📞 Support
 
-- **Issues:** [GitHub Issues](https://github.com/yourusername/whoosh.share/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/yourusername/whoosh.share/discussions)
+- **Issues:** [GitHub Issues](https://github.com/dmjdarshan/whoosh.share/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/dmjdarshan/whoosh.share/discussions)
 
 ---
 
-**Made with ❤️ for a more private, decentralized web.**
+**Made with ❤️ for Progressive Web Apps.**
