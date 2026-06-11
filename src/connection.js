@@ -365,6 +365,10 @@ export class ConnectionManager {
     }
 
     if (this.pc) {
+      this.pc.oniceconnectionstatechange = null;
+      this.pc.onconnectionstatechange = null;
+      this.pc.onicegatheringstatechange = null;
+      this.pc.ondatachannel = null;
       this.pc.close();
       this.pc = null;
     }
