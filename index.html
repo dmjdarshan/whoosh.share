@@ -11,13 +11,16 @@
     <title>Whoosh — Share files instantly</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="manifest" href="manifest.json">
-    <link rel="stylesheet" href="styles.css?v=5">
+    <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
     <div class="app">
         <!-- Header -->
         <header class="app-header">
-            <h1 class="app-title">whoosh</h1>
+            <div class="app-brand">
+                <h1 class="app-title">Whoosh</h1>
+                <p class="app-tagline">Serverless, cross-platform sharing</p>
+            </div>
             <button class="icon-btn" id="devicesBtn" aria-label="Recent devices">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="2" y="4" width="20" height="16" rx="2"></rect>
@@ -66,8 +69,8 @@
 
             <!-- Status Text -->
             <div class="status-container">
-                <p class="app-summary">Private nearby file sharing. Sound finds the other device, then files move directly over the local peer connection.</p>
-                <p class="setup-note">Open this page on both devices. Keep them on the same Wi-Fi or local network.</p>
+                <p class="app-summary">Pure browser nearby file sharing. No app install, no account, no cloud relay.</p>
+                <p class="setup-note">Open this page on both devices, keep them on the same Wi-Fi or local network, then use sound to connect.</p>
                 <p class="status-text" id="statusText">Tap to find nearby devices</p>
                 <p class="status-hint" id="statusHint" style="display: none;">
                     <span class="hint-item">🔊 Keep volume up</span>
@@ -123,6 +126,6 @@
     </div>
 
     <!-- Scripts -->
-    <script type="module" src="src/main.js?v=27"></script>
+    <script type="module" src="src/main.js?v=28"></script>
 </body>
 </html>
