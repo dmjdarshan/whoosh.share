@@ -64,8 +64,8 @@
 
 html, body {
     width: 100%;
-    height: 100%;
-    overflow: hidden;
+    min-height: 100%;
+    overflow-x: hidden;
 }
 
 body {
@@ -84,7 +84,8 @@ body {
 
 .app {
     width: 100%;
-    height: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     flex-direction: column;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
@@ -99,10 +100,17 @@ body {
 }
 
 .app-title {
-    font-size: var(--font-size-lg);
-    font-weight: 500;
+    font-size: 34px;
+    line-height: 1;
+    font-weight: 750;
     letter-spacing: 0;
     color: var(--text-primary);
+}
+
+.app-tagline {
+    margin-top: var(--space-1);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
 }
 
 .icon-btn {
@@ -134,9 +142,10 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: space-between;
-    padding: var(--space-4) var(--space-5) var(--space-6);
-    overflow: hidden;
+    justify-content: flex-start;
+    gap: var(--space-4);
+    padding: var(--space-2) var(--space-5) var(--space-6);
+    overflow: visible;
 }
 
 /* ============================================
@@ -144,18 +153,18 @@ body {
    ============================================ */
 
 .radar-container {
-    flex: 1;
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 100%;
-    max-height: 60vh;
+    min-height: 220px;
 }
 
 .radar {
     position: relative;
-    width: 260px;
-    height: 260px;
+    width: 240px;
+    height: 240px;
     border-radius: 50%;
 }
 
@@ -323,13 +332,14 @@ body {
 
 .status-container {
     text-align: center;
-    margin: var(--space-6) 0;
+    margin: 0;
     max-width: 360px;
 }
 
 .app-summary {
-    font-size: var(--font-size-sm);
-    color: var(--text-secondary);
+    font-size: var(--font-size-base);
+    color: var(--text-primary);
+    font-weight: 600;
     margin-bottom: var(--space-3);
     line-height: 1.45;
 }
@@ -369,10 +379,11 @@ body {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+    flex-shrink: 0;
 }
 
 .device-info {
-    margin-top: var(--space-4);
+    margin-top: 0;
     text-align: center;
 }
 
@@ -632,6 +643,57 @@ body {
 }
 
 /* ============================================
+   Responsive — Short Mobile
+   ============================================ */
+
+@media (max-height: 720px) and (max-width: 639px) {
+    .app-header {
+        padding: var(--space-3) var(--space-4);
+    }
+
+    .app-title {
+        font-size: 30px;
+    }
+
+    .app-main {
+        gap: var(--space-3);
+        padding: 0 var(--space-4) var(--space-5);
+    }
+
+    .radar-container {
+        min-height: 190px;
+    }
+
+    .radar {
+        width: 200px;
+        height: 200px;
+    }
+
+    .radar-ring-1 { width: 68px; height: 68px; }
+    .radar-ring-2 { width: 125px; height: 125px; }
+    .radar-ring-3 { width: 185px; height: 185px; }
+
+    .radar-pulse {
+        width: 185px;
+        height: 185px;
+    }
+
+    .app-summary,
+    .setup-note,
+    .status-text {
+        font-size: var(--font-size-sm);
+    }
+
+    .setup-note {
+        padding: var(--space-2) var(--space-3);
+    }
+
+    .btn {
+        padding: var(--space-3) var(--space-5);
+    }
+}
+
+/* ============================================
    Responsive — Desktop
    ============================================ */
 
@@ -643,10 +705,13 @@ body {
     
     .app-main {
         max-width: 480px;
+        min-height: 680px;
         background: var(--surface);
         border-radius: var(--radius-xl);
         box-shadow: var(--shadow-md);
         padding: var(--space-8);
+        justify-content: flex-start;
+        gap: var(--space-5);
     }
     
     .radar {

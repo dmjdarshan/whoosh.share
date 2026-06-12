@@ -1,8 +1,0 @@
-This is a placeholder. To create actual icons:
-1. Create a 192x192 PNG icon
-2. Create a 512x512 PNG icon
-3. Name them icon-192.png and icon-512.png
-4. Place them in the root directory
-
-For now, you can use any PNG image or generate one at:
-https://www.favicon-generator.org/

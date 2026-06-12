@@ -1,297 +1,111 @@
 # Whoosh.share
 
-> Serverless, peer-to-peer file transfer between devices on the same network using sound-based discovery.
+Serverless, Cross-platform, pure browser nearby file sharing.
 
-**No cloud. No installation. Just open the page on both devices and share.**
+Whoosh lets phones, tablets, and computers share files on the same local network with no app install. Open the page on both devices, pair them with sound, and send files directly over a local WebRTC connection. There is no backend, no account, and no relay server for file bytes.
 
----
+## How It Works
 
-## 🎯 What is Whoosh?
+1. Open the same Whoosh page on both devices.
+2. Keep both devices on the same Wi-Fi or local network.
+3. Tap `Start Sending` on the sender.
+4. Tap `Ready to Receive` on the receiver.
+5. The sender broadcasts a short sound offer.
+6. The receiver shows the sender on the radar; tap it to answer with sound.
+7. A WebRTC data channel opens.
+8. Send one file or multiple files over the direct connection.
 
-Whoosh is a web app that lets you transfer files between devices on the same WiFi network without any server in between. It uses **sound** to discover nearby devices and establish a direct peer-to-peer connection via WebRTC.
+Recent devices are remembered locally in browser storage only. They are shown as history and active-session shortcuts, not permanent reconnect credentials. Closed WebRTC sessions still require sound discovery again.
 
-### Key Features
+## Features
 
-- 🔊 **Sound-based discovery** — No server needed for device pairing
-- 🚀 **Fast transfers** — Direct peer-to-peer at full WiFi speed (80-150 Mbps)
-- 🔒 **Private** — Files never touch any server, everything stays local
-- 📱 **Cross-platform** — Works on phones, tablets, and computers
-- 🌐 **Pure web** — No app installation required
-- ✨ **Beautiful UI** — iOS-inspired design that feels native
+- Sound-based pairing with bundled `ggwave` WASM
+- Serverless LAN WebRTC connection
+- Single-file and multi-file transfer
+- Large-file chunking with backpressure
+- Reuse of the live data channel for `Send another`
+- Local-only recent-device history
+- PWA manifest and installable icons
+- Cross-platform web app for mobile and desktop browsers
+- Pure browser implementation with vanilla HTML/CSS/JavaScript and no build step
 
----
-
-## 🏗️ Architecture
-
-Whoosh combines three technologies:
-
-1. **ggwave (WASM)** — Encodes/decodes data as audio tones for device discovery
-2. **WebRTC DataChannel** — Establishes direct peer-to-peer connection for file transfer
-3. **Web Audio API** — Plays and captures audio for the discovery handshake
-
-See [Architecture.md](Architecture.md) for detailed technical documentation.
-
----
-
-## 🚀 Quick Start
-
-### Live Demo
+## Live Demo
 
 https://dmjdarshan.github.io/whoosh.share/
 
-### Prerequisites
+## Local Development
 
-- A modern web browser (Chrome, Firefox, or Safari 16+)
-- HTTPS or localhost (required for microphone access)
-- Two devices on the same WiFi network
-
-### Setup
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/yourusername/whoosh.share.git
-   cd whoosh.share
-   ```
-
-2. **Verify ggwave WASM files:**
-   
-   The app requires a ggwave browser build. This repository includes a self-contained `lib/ggwave/ggwave.js`; if you replace it, download a compatible build from the official repository:
-   
-   ```bash
-   # Create lib directory
-   mkdir -p lib/ggwave
-   
-   # Download ggwave.js from:
-   # https://github.com/ggerganov/ggwave/tree/master/examples/ggwave-wasm
-   
-   # Place it in lib/ggwave/
-   ```
-   
-   Or build from source:
-   ```bash
-   git clone https://github.com/ggerganov/ggwave.git
-   cd ggwave
-   # Follow build instructions for WASM
-   # Copy ggwave.js to whoosh.share/lib/ggwave/
-   ```
-
-3. **Serve the app:**
-   
-   You need HTTPS or localhost for microphone permissions. Use any static file server:
-   
-   ```bash
-   # Using Python
-   python3 -m http.server 8000
-   
-   # Using Node.js (http-server)
-   npx http-server -p 8000
-   
-   # Using PHP
-   php -S localhost:8000
-   ```
-
-4. **Open in browser:**
-   ```
-   http://localhost:8000
-   ```
-
-5. **Test with two devices:**
-   - Open the same URL on two devices on the same WiFi
-   - Tap "Start Sending" on the sending device
-   - Tap "Ready to Receive" on the receiving device
-   - When the sender appears on the receiver, tap it to send the answer tone
-   - After the connection opens on the sender, choose a file to send
-
----
-
-## 📁 Project Structure
-
-```
-whoosh.share/
-├── index.html              # App shell
-├── styles.css              # iOS-inspired design system
-├── manifest.json           # PWA manifest
-├── sw.js                   # Service Worker (offline support)
-├── src/
-│   ├── main.js             # Entry point & orchestration
-│   ├── ui.js               # UI state management
-│   ├── discovery.js        # ggwave integration (audio discovery)
-│   ├── connection.js       # WebRTC connection manager
-│   └── transfer.js         # File chunking & transfer
-├── lib/
-│   └── ggwave/
-│       └── ggwave.js       # ggwave WASM wrapper, current copy embeds WASM
-├── Architecture.md         # Detailed technical documentation
-└── README.md               # This file
-```
-
----
-
-## ⚙️ Integrating ggwave WASM
-
-The current implementation loads the bundled `lib/ggwave/ggwave.js` build directly. This build exposes `window.ggwave_factory`, embeds the WASM payload, and uses the current ggwave API:
-
-- `const ggwave = await window.ggwave_factory()`
-- `const params = ggwave.getDefaultParameters()`
-- `const instance = ggwave.init(params)`
-- `ggwave.encode(instance, payload, protocol, volume)`
-- `ggwave.decode(instance, samples)`
-
-If you replace `ggwave.js` with a different upstream build, verify whether that build expects an external `ggwave.wasm` file and update `src/discovery.js` only if its API differs.
-
-### Step 1: Download ggwave Files
-
-Get a compatible ggwave WASM build:
-
-- **Official repo:** https://github.com/ggerganov/ggwave
-- **WASM example:** https://github.com/ggerganov/ggwave/tree/master/examples/ggwave-wasm
-- **Pre-built demo:** https://wasm.ggerganov.com/ (inspect network tab for files)
-
-You need either:
-- A self-contained `ggwave.js` like the current bundled file
-- Or `ggwave.js` plus `ggwave.wasm`, if your chosen build loads WASM separately
-
-### Step 2: Place Files
+Serve the repo over `localhost` or HTTPS. Microphone access does not work from `file://`.
 
 ```bash
-lib/ggwave/
-└── ggwave.js
+python3 -m http.server 8000
 ```
 
-### Step 3: Test
+Then open:
 
-1. Open the app on two devices
-2. Tap "Start Sending" on the sender and "Ready to Receive" on the receiver
-3. You should hear repeated short tones from the sender while discovery is active
-4. The sender should appear on the receiver within 5-10 seconds; tap it to respond with an answer tone
-
----
-
-## 🧪 Testing
-
-### Browser Compatibility
-
-| Browser | Discovery | Transfer | Notes |
-|---------|-----------|----------|-------|
-| Chrome (Desktop) | ✅ | ✅ | Primary target |
-| Chrome (Android) | ✅ | ✅ | Primary target |
-| Firefox | ✅ | ✅ | Fully supported |
-| Safari (macOS) | ⚠️ | ✅ | Requires user gesture for audio |
-| Safari (iOS 16+) | ⚠️ | ✅ | Requires user gesture, needs testing |
-
-### Testing Checklist
-
-- [ ] Two devices discover each other via sound
-- [ ] WebRTC connection establishes successfully
-- [ ] Small file (< 1MB) transfers completely
-- [ ] Large file (> 100MB) transfers with progress
-- [ ] Transfer can be cancelled mid-flight
-- [ ] Connection survives brief network interruption
-- [ ] Works on different device types (phone ↔ laptop)
-- [ ] Works with screen locked (wake lock active)
-- [ ] Microphone permission handled gracefully
-- [ ] Error messages are user-friendly
-
-### Debug Mode
-
-Enable verbose logging:
-
-```javascript
-// In browser console
-localStorage.setItem('whoosh-debug', 'true');
-location.reload();
+```text
+http://localhost:8000
 ```
 
-Check WebRTC stats:
+For a real two-device test, open the page on both devices on the same Wi-Fi. If testing from a phone against a laptop-hosted local server, open the laptop's LAN IP on the phone, for example `http://192.168.1.100:8000`.
+
+## Project Structure
+
+```text
+whoosh.share/
+├── index.html
+├── styles.css
+├── manifest.json
+├── sw.js
+├── src/
+│   ├── main.js
+│   ├── ui.js
+│   ├── discovery.js
+│   ├── connection.js
+│   └── transfer.js
+├── lib/ggwave/
+│   ├── README.md
+│   └── ggwave.js
+├── docs/
+│   ├── architecture.md
+│   ├── setup.md
+│   ├── deployment.md
+│   └── troubleshooting.md
+└── README.md
 ```
-chrome://webrtc-internals
-```
 
----
+## Documentation
 
-See [Architecture.md](Architecture.md) for detailed design specifications.
+- [Architecture](docs/architecture.md)
+- [Setup](docs/setup.md)
+- [Deployment](docs/deployment.md)
+- [Troubleshooting](docs/troubleshooting.md)
 
----
+## Privacy Model
 
-## 🔧 Development
+Whoosh loads static app files from the host. Pairing data is transmitted as sound between nearby devices. File bytes move through the WebRTC data channel between peers.
 
-### No Build Step Required
+Nothing is uploaded to an app server. Recent-device history is stored in `localStorage` and is cleared when browser storage/cache is cleared.
 
-Whoosh uses vanilla JavaScript with ES modules. No npm, no webpack, no build process.
+## Current Limitations
 
-Just edit the files and refresh the browser.
+- Devices must be on the same local network.
+- Public Wi-Fi with client isolation, strict firewalls, or VPNs can block WebRTC.
+- Closed or reloaded sessions cannot reconnect from cached device history alone.
+- Transfers do not resume after disconnection.
+- Received multi-file batches are offered as individual downloads.
 
----
+## References And Acknowledgements
 
-## 🚧 Known Limitations
+Whoosh builds on ideas and tools from:
 
-### Current Implementation
+- [ggwave](https://github.com/ggerganov/ggwave): audio data transmission and the bundled WASM-based sound encoder/decoder.
+- [wave-share](https://github.com/ggerganov/wave-share): proof that a WebRTC handshake can be exchanged through sound in the browser.
+- [Snapdrop](https://snapdrop.net) and [Snapdrop GitHub](https://github.com/RobinLinus/snapdrop): the broader browser-based local file sharing UX pattern.
+- [PairDrop](https://github.com/schlagmichdoch/PairDrop): improvements and product thinking around peer-to-peer sharing workflows.
+- [WebRTC](https://webrtc.org/): encrypted browser peer-to-peer data channels.
+- [Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API): microphone capture and speaker playback for sound pairing.
 
-- **ggwave API dependent** — Replacing the bundled ggwave build may require adapting `src/discovery.js`
-- **No resume** — Transfer must complete in one session
-- **No encryption** — Files are sent in plaintext over local network (WebRTC is encrypted by default with DTLS)
+## License
 
-### Browser Limitations
-
-- **iOS Safari** — Requires user tap before audio (handled by the Start Sending/Ready to Receive buttons)
-- **Background tabs** — Audio may be throttled, keep tab active
-- **Ultrasonic support** — Some devices can't produce/capture 18-22kHz frequencies
-
-### Network Requirements
-
-- **Same WiFi** — Devices must be on the same local network
-- **No VPN** — VPNs may block peer-to-peer connections
-- **No firewall** — Strict firewalls may block WebRTC
-
----
-
-## 📚 References
-
-### Inspirations
-
-- [Snapdrop](https://snapdrop.net) — WebRTC file sharing with server-based discovery
-- [PairDrop](https://github.com/schlagmichdoch/PairDrop) — Snapdrop fork with improvements
-- [wave-share](https://github.com/ggerganov/wave-share) — WebRTC handshake over audio (proof of concept)
-
-### Technologies
-
-- [ggwave](https://github.com/ggerganov/ggwave) — FSK audio data transmission
-- [WebRTC](https://webrtc.org/) — Peer-to-peer communication
-- [Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API) — Audio processing
-
----
-
-## 🤝 Contributing
-
-Contributions welcome! Areas that need work:
-
-1. **ggwave integration** — Test and harden audio discovery across device/browser pairs
-3. **Error handling** — More robust error recovery
-5. **Transfer resume** — Handle connection drops gracefully
-6. **Dark mode** — Add dark color scheme
-7. **Accessibility** — ARIA labels, keyboard navigation
-
----
-
-## 📄 License
-
-MIT License — see [LICENSE](LICENSE) file.
-
----
-
-## 🙏 Acknowledgments
-
-- **Georgi Gerganov** for [ggwave](https://github.com/ggerganov/ggwave) — the core technology that makes serverless discovery possible
-- **Robin Linus** for [Snapdrop](https://github.com/RobinLinus/snapdrop) — inspiration for the UX
-- **Apple** for AirDrop — the gold standard for local file sharing
-
----
-
-## 📞 Support
-
-- **Issues:** [GitHub Issues](https://github.com/dmjdarshan/whoosh.share/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/dmjdarshan/whoosh.share/discussions)
-
----
-
-**Made with ❤️ for Progressive Web Apps.**
+See [LICENSE](LICENSE).
